@@ -53,16 +53,12 @@
             <div
               v-for="conv in sortedPrivateConversations"
               :key="conv.id"
-              :class="['conversation-item', 'user-item', {
-                active: activeConversation === conv.id,
-                'user-offline': !isUserOnline(getPrivateChatUserId(conv))
+              :class="['conversation-item', {
+                active: activeConversation === conv.id
               }]"
               @click="switchConversation(conv)"
             >
-              <div class="user-avatar-wrapper">
-                <el-avatar :size="40">{{ conv.name[0] }}</el-avatar>
-                <span :class="['user-status-dot', { online: isUserOnline(getPrivateChatUserId(conv)) }]"></span>
-              </div>
+              <el-avatar :size="40">{{ conv.name[0] }}</el-avatar>
               <div class="conversation-info">
                 <div class="conversation-name">{{ conv.name }}</div>
                 <div class="conversation-last">
@@ -75,21 +71,15 @@
             <div
               v-for="user in usersWithoutConversation"
               :key="user.id"
-              :class="['conversation-item', 'user-item', {
-                active: isUserInActivePrivateChat(user.id),
-                'user-offline': !isUserOnline(user.id)
+              :class="['conversation-item', {
+                active: isUserInActivePrivateChat(user.id)
               }]"
               @click="startPrivateChatWithUser(user)"
             >
-              <div class="user-avatar-wrapper">
-                <el-avatar :size="40">{{ user.name[0] }}</el-avatar>
-                <span :class="['user-status-dot', { online: isUserOnline(user.id) }]"></span>
-              </div>
+              <el-avatar :size="40">{{ user.name[0] }}</el-avatar>
               <div class="conversation-info">
                 <div class="conversation-name">{{ user.name }}</div>
-                <div class="user-status-text">
-                  {{ isUserOnline(user.id) ? '在线' : '离线' }}
-                </div>
+                <div class="conversation-last">点击开始聊天</div>
               </div>
             </div>
           </div>
@@ -1319,16 +1309,6 @@ onBeforeUnmount(() => {
   border-left: 3px solid #409eff;
 }
 
-/* 离线用户样式 */
-.conversation-item.user-item.user-offline {
-  opacity: 0.6;
-  filter: grayscale(100%);
-}
-
-.conversation-item.user-item.user-offline:hover {
-  opacity: 0.8;
-  filter: grayscale(80%);
-}
 
 .conversation-info {
   flex: 1;
@@ -1349,31 +1329,6 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.user-status-text {
-  font-size: 12px;
-  color: #909399;
-}
-
-.user-avatar-wrapper {
-  position: relative;
-}
-
-.user-status-dot {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid #ffffff;
-  background-color: #909399;
-}
-
-.user-status-dot.online {
-  background-color: #67c23a;
-  box-shadow: 0 0 4px rgba(103, 194, 58, 0.5);
-}
-
 .user-info {
   flex: 1;
   overflow: hidden;
@@ -1386,11 +1341,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.user-status-text {
-  font-size: 12px;
-  color: #909399;
 }
 
 .chat-header {

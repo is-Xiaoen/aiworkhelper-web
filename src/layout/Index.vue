@@ -3,8 +3,8 @@
     <!-- 侧边栏 -->
     <el-aside :width="isCollapse ? '64px' : '200px'" class="layout-aside">
       <div class="logo">
-        <span v-if="!isCollapse">AI助手</span>
-        <span v-else>AI</span>
+        <span v-if="!isCollapse">智能办公系统</span>
+        <span v-else>办公</span>
       </div>
 
       <el-menu
