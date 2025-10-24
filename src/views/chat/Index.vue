@@ -1397,11 +1397,14 @@ const createGroupChat = async () => {
 
   // 生成群ID和群名称
   const groupId = `group_${Date.now()}`
-  const memberNames = selectedUserIds.value
-    .map(id => userList.value.find(u => u.id === id)?.name)
+
+  // 获取所有成员（包括创建者自己）的名称
+  const allMemberIds = [userStore.userInfo?.id || '', ...selectedUserIds.value]
+  const memberNames = allMemberIds
+    .map(id => userList.value.find(u => u.id === id)?.name || (id === userStore.userInfo?.id ? userStore.userInfo?.name : ''))
     .filter(Boolean)
-    .slice(0, 3) // 最多显示3个名字
-  const groupName = memberNames.join('、') + (selectedUserIds.value.length > 3 ? '等' : '')
+    .slice(0, 5) // 最多显示5个名字
+  const groupName = memberNames.join('、') + (allMemberIds.length > 5 ? '...' : '')
 
   console.log('[创建群聊] 准备创建群聊:', {
     groupId,
@@ -1418,7 +1421,7 @@ const createGroupChat = async () => {
     recvId: '',
     sendId: userStore.userInfo?.id || '',
     chatType: 1, // 普通群聊消息
-    content: `${userStore.userInfo?.name}创建了群聊"${groupName}"，成员：${memberNames.join('、')}${selectedUserIds.value.length > 3 ? '等' : ''}`,
+    content: `${userStore.userInfo?.name}创建了群聊"${groupName}"，成员：${memberNames.join('、')}${allMemberIds.length > 5 ? '...' : ''}`,
     contentType: 1
   }
 
