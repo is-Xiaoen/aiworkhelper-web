@@ -35,15 +35,17 @@
               </div>
             </div>
 
-            <!-- 群聊 -->
+            <!-- 群聊列表 -->
             <div
-              :class="['conversation-item', { active: activeConversation === 'all' }]"
-              @click="switchConversation(conversations[1])"
+              v-for="conv in groupConversations"
+              :key="conv.id"
+              :class="['conversation-item', { active: activeConversation === conv.id }]"
+              @click="switchConversation(conv)"
             >
               <el-avatar :size="40" style="background-color: #67c23a;">群</el-avatar>
               <div class="conversation-info">
-                <div class="conversation-name">群聊</div>
-                <div class="conversation-last">{{ conversations[1].lastMessage || '暂无消息' }}</div>
+                <div class="conversation-name">{{ conv.name }}</div>
+                <div class="conversation-last">{{ conv.lastMessage || '暂无消息' }}</div>
               </div>
             </div>
 
@@ -53,13 +55,13 @@
               :key="conv.id"
               :class="['conversation-item', 'user-item', {
                 active: activeConversation === conv.id,
-                'user-offline': !isUserOnline(conv.id.replace('private_', ''))
+                'user-offline': !isUserOnline(getPrivateChatUserId(conv))
               }]"
               @click="switchConversation(conv)"
             >
               <div class="user-avatar-wrapper">
                 <el-avatar :size="40">{{ conv.name[0] }}</el-avatar>
-                <span :class="['user-status-dot', { online: isUserOnline(conv.id.replace('private_', '')) }]"></span>
+                <span :class="['user-status-dot', { online: isUserOnline(getPrivateChatUserId(conv)) }]"></span>
               </div>
               <div class="conversation-info">
                 <div class="conversation-name">{{ conv.name }}</div>
@@ -74,7 +76,7 @@
               v-for="user in usersWithoutConversation"
               :key="user.id"
               :class="['conversation-item', 'user-item', {
-                active: activeConversation === `private_${user.id}`,
+                active: isUserInActivePrivateChat(user.id),
                 'user-offline': !isUserOnline(user.id)
               }]"
               @click="startPrivateChatWithUser(user)"
@@ -109,7 +111,7 @@
             <!-- 消息列表 -->
             <div ref="messageListRef" class="message-list">
               <div
-                v-for="(msg, index) in messages"
+                v-for="(msg, index) in sortedMessages"
                 :key="index"
                 :class="['message-item', msg.isSelf ? 'self' : 'other']"
               >
@@ -193,7 +195,7 @@
     <!-- 用户选择对话框 -->
     <el-dialog
       v-model="userSelectDialogVisible"
-      title="选择用户"
+      :title="isCreatingGroup ? '创建群聊 - 选择成员' : '选择用户'"
       width="500px"
     >
       <el-input
@@ -202,20 +204,48 @@
         prefix-icon="Search"
         style="margin-bottom: 16px;"
       />
+
+      <!-- 已选择的用户（创建群聊时显示） -->
+      <div v-if="isCreatingGroup && selectedUserIds.length > 0" class="selected-users">
+        <el-tag
+          v-for="userId in selectedUserIds"
+          :key="userId"
+          closable
+          @close="toggleUserSelection(userId)"
+          style="margin-right: 8px; margin-bottom: 8px;"
+        >
+          {{ userList.find(u => u.id === userId)?.name }}
+        </el-tag>
+      </div>
+
       <div class="user-list">
         <div
           v-for="user in filteredUsers"
           :key="user.id"
-          class="user-item"
-          @click="startPrivateChat(user)"
+          :class="['user-item', { selected: selectedUserIds.includes(user.id) }]"
+          @click="handleUserSelect(user)"
         >
           <el-avatar :size="36">{{ user.name[0] }}</el-avatar>
           <span class="user-name">{{ user.name }}</span>
+          <el-icon v-if="isCreatingGroup && selectedUserIds.includes(user.id)" class="check-icon">
+            <el-icon-check />
+          </el-icon>
         </div>
       </div>
       <div v-if="filteredUsers.length === 0" class="empty-text">
         暂无用户
       </div>
+
+      <template #footer v-if="isCreatingGroup">
+        <el-button @click="userSelectDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="selectedUserIds.length < 2"
+          @click="createGroupChat"
+        >
+          创建群聊 ({{ selectedUserIds.length }}人)
+        </el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -223,7 +253,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Picture, Loading } from '@element-plus/icons-vue'
+import { Plus, Picture, Loading, Check } from '@element-plus/icons-vue'
 import { chat } from '@/api/chat'
 import { uploadFile } from '@/api/upload'
 import { getUserList } from '@/api/user'
@@ -248,6 +278,9 @@ interface Conversation {
   name: string
   type: 'ai' | 'group' | 'private'
   lastMessage: string
+  memberIds?: string[] // 群聊成员ID列表
+  creatorId?: string   // 群创建者ID
+  createTime?: number  // 创建时间
 }
 
 const messageListRef = ref<HTMLElement>()
@@ -260,6 +293,8 @@ const aiLoading = ref(false)
 const userList = ref<User[]>([])
 const userSelectDialogVisible = ref(false)
 const userSearchKeyword = ref('')
+const selectedUserIds = ref<string[]>([]) // 多选用户ID列表
+const isCreatingGroup = ref(false) // 是否正在创建群聊
 
 // WebSocket相关
 let wsClient: WebSocketClient | null = null
@@ -277,13 +312,8 @@ const conversations = ref<Conversation[]>([
     name: 'AI助手',
     type: 'ai',
     lastMessage: '你好，我是AI助手'
-  },
-  {
-    id: 'all',
-    name: '群聊',
-    type: 'group',
-    lastMessage: ''
   }
+  // 群聊会话将动态添加
 ])
 
 const activeConversation = ref('ai')
@@ -292,6 +322,11 @@ const aiChatType = ref(0)
 
 const currentConversationName = computed(() => {
   return conversations.value.find(c => c.id === activeConversation.value)?.name || ''
+})
+
+// 获取群聊列表
+const groupConversations = computed(() => {
+  return conversations.value.filter(c => c.type === 'group')
 })
 
 // 获取私聊会话列表（按最后消息时间排序）
@@ -308,15 +343,51 @@ const sortedPrivateConversations = computed(() => {
   })
 })
 
+// 获取私聊会话中的对方用户ID
+const getPrivateChatUserId = (conv: Conversation) => {
+  if (conv.memberIds && conv.memberIds.length > 0) {
+    // 返回不是当前用户的ID
+    return conv.memberIds.find(id => id !== userStore.userInfo?.id) || ''
+  }
+  return ''
+}
+
+// 检查用户是否在当前活跃的私聊会话中
+const isUserInActivePrivateChat = (userId: string) => {
+  if (!activeConversation.value) return false
+  
+  const activeConv = conversations.value.find(c => c.id === activeConversation.value)
+  if (!activeConv || activeConv.type !== 'private') return false
+  
+  return activeConv.memberIds?.includes(userId) || false
+}
+
 // 没有私聊会话的用户列表
 const usersWithoutConversation = computed(() => {
-  const privateConvIds = conversations.value
+  // 获取所有私聊会话中的用户ID
+  const privateConvUserIds = new Set<string>()
+  
+  conversations.value
     .filter(c => c.type === 'private')
-    .map(c => c.id.replace('private_', ''))
+    .forEach(conv => {
+      // 从 memberIds 中获取对方用户ID（排除自己）
+      if (conv.memberIds) {
+        conv.memberIds.forEach(id => {
+          if (id !== userStore.userInfo?.id) {
+            privateConvUserIds.add(id)
+          }
+        })
+      }
+    })
 
   return userList.value.filter(u =>
-    u.id !== userStore.userInfo?.id && !privateConvIds.includes(u.id)
+    u.id !== userStore.userInfo?.id && !privateConvUserIds.has(u.id)
   )
+})
+
+// 按时间排序的消息列表
+const sortedMessages = computed(() => {
+  return [...messages.value].sort((a, b) => a.time - b.time)
 })
 
 // 过滤用户列表（对话框用）
@@ -404,6 +475,51 @@ const initWebSocket = async () => {
 const handleReceiveMessage = (wsMessage: WsMessage) => {
   console.log('[接收消息] 收到WebSocket消息:', wsMessage)
 
+  // 处理系统消息（群聊创建通知等）
+  if (wsMessage.chatType === 99) {
+    console.log('[接收消息] 收到系统消息:', wsMessage.systemType)
+
+    if (wsMessage.systemType === 'group_create' && wsMessage.groupInfo) {
+      const { groupId, groupName, memberIds, creatorId } = wsMessage.groupInfo
+
+      // 检查自己是否在群成员列表中
+      const isMyGroup = memberIds.includes(userStore.userInfo?.id || '')
+
+      console.log('[接收消息] 群聊创建通知:', {
+        groupId,
+        groupName,
+        memberIds,
+        当前用户ID: userStore.userInfo?.id,
+        是否是我的群: isMyGroup
+      })
+
+      if (isMyGroup) {
+        // 检查本地是否已存在该群聊
+        const existingGroup = conversations.value.find(c => c.id === groupId)
+        if (!existingGroup) {
+          // 创建群聊会话
+          const newGroup: Conversation = {
+            id: groupId,
+            name: groupName,
+            type: 'group',
+            lastMessage: wsMessage.content,
+            memberIds,
+            creatorId,
+            createTime: Date.now()
+          }
+          conversations.value.push(newGroup)
+          console.log('[接收消息] 自动创建群聊会话:', newGroup)
+
+          // 如果不是创建者，显示通知
+          if (creatorId !== userStore.userInfo?.id) {
+            ElMessage.success(`你已被邀请加入群聊"${groupName}"`)
+          }
+        }
+      }
+    }
+    return // 系统消息不需要显示在聊天列表中
+  }
+
   // 获取发送者名称
   const senderUser = userList.value.find(u => u.id === wsMessage.sendId)
   const senderName = wsMessage.sendId === userStore.userInfo?.id
@@ -424,26 +540,73 @@ const handleReceiveMessage = (wsMessage: WsMessage) => {
   // 根据消息类型添加到对应会话
   if (wsMessage.chatType === 1) {
     // 群聊消息
-    const convId = 'all'
+    const convId = wsMessage.conversationId
+
+    // 检查是否是自己所在的群
+    let groupConv = conversations.value.find(c => c.id === convId && c.type === 'group')
+
+    console.log('[接收消息] 群聊消息处理:', {
+      conversationId: convId,
+      找到群会话: !!groupConv,
+      当前会话: activeConversation.value,
+      消息内容: message.content,
+      发送者ID: wsMessage.sendId,
+      当前用户ID: userStore.userInfo?.id
+    })
+
+    // 如果本地没有这个群聊会话，自动创建该群聊
+    // 无论是自己发的还是别人发的，只要收到消息就说明这个群是存在的
+    if (!groupConv) {
+      console.log('[接收消息] 收到未知群的消息，自动创建群聊会话')
+
+      // 尝试从消息内容中提取群名称（如果是创建群聊的欢迎消息）
+      let groupName = convId // 默认使用群ID
+      const createPattern = /创建了群聊"(.+?)"，成员：(.+)/
+      const match = message.content.match(createPattern)
+      if (match) {
+        groupName = match[1] // 提取群名称
+        console.log('[接收消息] 从消息中提取群名称:', groupName)
+      } else {
+        // 如果无法提取，使用发送者名称
+        const senderName = senderUser?.name || '未知用户'
+        groupName = `${senderName}的群聊`
+      }
+
+      groupConv = {
+        id: convId,
+        name: groupName,
+        type: 'group',
+        lastMessage: '',
+        memberIds: [userStore.userInfo?.id || '', wsMessage.sendId], // 至少包含自己和发送者
+        creatorId: wsMessage.sendId,
+        createTime: Date.now()
+      }
+      conversations.value.push(groupConv)
+
+      // 只有不是自己发的消息才提示加入群聊
+      if (wsMessage.sendId !== userStore.userInfo?.id) {
+        ElMessage.success(`你已加入群聊"${groupConv.name}"`)
+      }
+    }
+
     if (!conversationMessages[convId]) {
       conversationMessages[convId] = []
     }
 
-    // 去重检查：检查最近的消息中是否有相同内容的消息（防止乐观更新和WebSocket回传重复）
-    const recentMessages = conversationMessages[convId].slice(-10) // 只检查最近10条
+    // 去重检查：检查最近的消息中是否有相同的内容
+    // 由于群聊消息后端会回传给发送者，所以需要去重
+    const recentMessages = conversationMessages[convId].slice(-20) // 检查最近20条消息
     const isDuplicate = recentMessages.some(m =>
       m.sendId === message.sendId &&
       m.content === message.content &&
       m.contentType === message.contentType &&
-      Math.abs(m.time - message.time) < 3 // 3秒内的相同消息视为重复
+      Math.abs(m.time - message.time) < 5 // 5秒内的相同消息视为重复
     )
 
-    console.log('[接收消息] 群聊消息处理:', {
-      convId,
-      isDuplicate,
-      当前会话: activeConversation.value,
-      是否在当前会话: activeConversation.value === convId,
-      消息内容: message.content
+    console.log('[接收消息] 去重检查:', {
+      是否重复: isDuplicate,
+      最近消息数: recentMessages.length,
+      当前消息: { sendId: message.sendId, content: message.content.substring(0, 20) }
     })
 
     if (!isDuplicate) {
@@ -455,26 +618,35 @@ const handleReceiveMessage = (wsMessage: WsMessage) => {
         conv.lastMessage = message.contentType === 1 ? message.content : '[图片]'
       }
 
-      // 如果当前在该会话，更新消息列表并滚动
-      if (activeConversation.value === convId) {
-        console.log('[接收消息] 添加消息到当前显示列表')
-        messages.value.push(message)
-        scrollToBottom()
-      } else {
-        console.log('[接收消息] 不在当前会话，消息已保存但不显示')
-      }
+    // 如果当前在该会话，更新消息列表并滚动
+    if (activeConversation.value === convId) {
+      console.log('[接收消息] 添加消息到当前显示列表')
+      console.log('[接收消息] 添加前messages.value长度:', messages.value.length)
+      console.log('[接收消息] 要添加的消息:', {
+        sendId: message.sendId,
+        content: message.content,
+        time: message.time
+      })
+      messages.value.push(message)
+      console.log('[接收消息] 添加后messages.value长度:', messages.value.length)
+      scrollToBottom()
+    } else {
+      console.log('[接收消息] 不在当前会话，消息已保存但不显示')
+    }
     } else {
       console.log('[接收消息] 检测到重复消息，已忽略')
     }
   } else if (wsMessage.chatType === 2) {
     // 私聊消息处理
-    // 确定对话的另一方用户ID
+    // 使用后端返回的 conversationId，确保所有用户使用同一个会话ID
+    const convId = wsMessage.conversationId
+
+    // 确定对话的另一方用户ID（用于显示头像和名称）
     const otherUserId = wsMessage.sendId === userStore.userInfo?.id ? wsMessage.recvId : wsMessage.sendId
-    const convId = `private_${otherUserId}`
 
     console.log('[接收消息] 私聊消息:', {
       后端conversationId: wsMessage.conversationId,
-      计算后的convId: convId,
+      使用的convId: convId,
       sendId: wsMessage.sendId,
       recvId: wsMessage.recvId,
       当前用户ID: userStore.userInfo?.id,
@@ -501,32 +673,84 @@ const handleReceiveMessage = (wsMessage: WsMessage) => {
       return
     }
 
+    // 特殊处理：如果是自己发送的消息回显，且已经通过乐观更新添加过，则跳过
+    console.log('[接收消息] 检查消息发送者ID:', wsMessage.sendId, '当前用户ID:', userStore.userInfo?.id)
+    if (wsMessage.sendId === userStore.userInfo?.id) {
+      console.log('[接收消息] 收到自己发送的消息回显，跳过添加（已通过乐观更新处理）')
+      return
+    }
+
     conversationMessages[convId].push(message)
 
     // 查找或创建私聊会话
-    let conv = conversations.value.find(c => c.id === convId)
+    // 注意：可能已经存在使用旧格式 private_${otherUserId} 的会话，需要查找并更新
+    let conv = conversations.value.find(c => c.id === convId || (c.type === 'private' && c.memberIds?.includes(otherUserId)))
+
     if (!conv) {
-      // 从convId中提取对方用户ID
-      const otherUserId = convId.replace('private_', '')
+      // 创建新的私聊会话
       const otherUser = userList.value.find(u => u.id === otherUserId)
       conv = {
-        id: convId,
+        id: convId, // 使用后端返回的 conversationId
         name: otherUser?.name || '用户' + otherUserId.slice(0, 4),
         type: 'private',
-        lastMessage: message.contentType === 1 ? message.content : '[图片]'
+        lastMessage: message.contentType === 1 ? message.content : '[图片]',
+        memberIds: [userStore.userInfo?.id || '', otherUserId] // 存储双方用户ID
       }
       conversations.value.push(conv)
       console.log('[接收消息] 创建新的私聊会话:', conv)
     } else {
+      // 更新已有会话
+      const oldConvId = conv.id
+      if (oldConvId !== convId) {
+        // 如果是旧格式的会话，更新为新的 conversationId
+        console.log('[接收消息] 更新会话ID:', { 旧ID: oldConvId, 新ID: convId })
+
+        // 迁移消息历史
+        if (conversationMessages[oldConvId]) {
+          conversationMessages[convId] = [...(conversationMessages[convId] || []), ...conversationMessages[oldConvId]]
+          delete conversationMessages[oldConvId]
+        }
+
+        // 更新会话ID
+        conv.id = convId
+
+        // 如果当前正在查看这个会话，需要更新 activeConversation
+        if (activeConversation.value === oldConvId) {
+          console.log('[接收消息] 更新当前活动会话ID:', convId)
+          activeConversation.value = convId
+          // 重新加载消息列表
+          messages.value = conversationMessages[convId] || []
+        }
+      }
       conv.lastMessage = message.contentType === 1 ? message.content : '[图片]'
       console.log('[接收消息] 更新已有私聊会话:', conv)
     }
 
     // 如果当前在该会话，更新消息列表并滚动
     if (activeConversation.value === convId) {
-      console.log('[接收消息] 添加私聊消息到当前显示列表')
-      messages.value.push(message)
-      scrollToBottom()
+      console.log('[接收消息] 私聊-添加消息到当前显示列表')
+      console.log('[接收消息] 私聊-添加前messages.value长度:', messages.value.length)
+      console.log('[接收消息] 私聊-要添加的消息:', {
+        sendId: message.sendId,
+        content: message.content,
+        time: message.time
+      })
+      
+      // 检查消息是否已存在（避免WebSocket回显导致的重复）
+      const messageExists = messages.value.some(existingMsg => 
+        existingMsg.sendId === message.sendId && 
+        existingMsg.content === message.content && 
+        existingMsg.time === message.time
+      )
+      
+      if (!messageExists) {
+        console.log('[接收消息] 私聊-消息不存在，添加到显示列表')
+        messages.value.push(message)
+        console.log('[接收消息] 私聊-添加后messages.value长度:', messages.value.length)
+        scrollToBottom()
+      } else {
+        console.log('[接收消息] 私聊-消息已存在，跳过添加（避免重复）')
+      }
     } else {
       console.log('[接收消息] 不在当前会话，私聊消息已保存但不显示')
     }
@@ -608,38 +832,25 @@ const sendGroupMessage = async () => {
   const content = inputMessage.value.trim()
   if (!content) return
 
+  // 获取当前群聊ID
+  const currentGroupId = activeConversation.value
+
   const wsMessage: WsMessage = {
-    conversationId: 'all',
+    conversationId: currentGroupId,
     recvId: '',
     sendId: userStore.userInfo?.id || '',
-    chatType: 1,
+    chatType: 1, // 群聊
     content,
     contentType: 1
   }
 
+  console.log('[发送群聊] 发送消息:', wsMessage)
   wsClient.send(wsMessage)
   inputMessage.value = ''
 
-  // 立即添加到本地消息列表(乐观更新)
-  const message: Message = {
-    sendId: userStore.userInfo?.id || '',
-    senderName: '我',
-    content,
-    contentType: 1,
-    time: Date.now() / 1000,
-    isSelf: true
-  }
-
-  // 添加到会话消息记录
-  const convId = 'all'
-  if (!conversationMessages[convId]) {
-    conversationMessages[convId] = []
-  }
-  conversationMessages[convId].push(message)
-
-  // 添加到当前显示的消息列表
-  messages.value.push(message)
-  scrollToBottom()
+  // 注意: 不在这里做乐观更新,等待后端回传消息
+  // 这样可以避免消息重复显示的问题
+  // 群聊消息后端会回传给所有成员(包括发送者),所以不需要乐观更新
 }
 
 // 在群聊中 @AI
@@ -708,11 +919,27 @@ const sendPrivateMessage = async () => {
   const content = inputMessage.value.trim()
   if (!content) return
 
-  // 从会话ID中提取接收者ID
-  const recvId = activeConversation.value.replace('private_', '')
+  // 从当前会话中获取对方用户ID
+  const currentConv = conversations.value.find(c => c.id === activeConversation.value)
+  if (!currentConv || currentConv.type !== 'private') {
+    ElMessage.error('无效的私聊会话')
+    return
+  }
+
+  // 从 memberIds 中找到对方的用户ID（排除自己）
+  const recvId = currentConv.memberIds?.find(id => id !== userStore.userInfo?.id)
+  if (!recvId) {
+    console.error('[发送私聊] 无法找到接收者ID:', {
+      当前会话: currentConv,
+      当前用户ID: userStore.userInfo?.id,
+      memberIds: currentConv.memberIds
+    })
+    ElMessage.error('无法找到接收者ID')
+    return
+  }
 
   const wsMessage: WsMessage = {
-    conversationId: activeConversation.value,
+    conversationId: '', // 不发送 conversationId，让后端自己生成
     recvId,
     sendId: userStore.userInfo?.id || '',
     chatType: 2,
@@ -720,7 +947,7 @@ const sendPrivateMessage = async () => {
     contentType: 1
   }
 
-  console.log('[发送私聊] 发送消息:', wsMessage)
+  console.log('[发送私聊] 发送消息:', { conversationId: '(由后端生成)', recvId, content })
   wsClient.send(wsMessage)
   inputMessage.value = ''
 
@@ -752,10 +979,37 @@ const sendPrivateMessage = async () => {
 
   if (!isDuplicate) {
     console.log('[发送私聊] 乐观更新：添加到本地消息列表')
+    console.log('[发送私聊] 乐观更新消息详情:', {
+      sendId: message.sendId,
+      content: message.content,
+      time: message.time,
+      convId: convId
+    })
     conversationMessages[convId].push(message)
-    // 添加到当前显示的消息列表
-    messages.value.push(message)
-    scrollToBottom()
+    
+    // 只有在当前会话中才添加到显示列表
+    if (activeConversation.value === convId) {
+      console.log('[发送私聊] 乐观更新：添加到当前显示列表')
+      console.log('[发送私聊] 乐观更新前messages.value长度:', messages.value.length)
+      
+      // 检查显示列表中是否已存在该消息（避免重复显示）
+      const displayMessageExists = messages.value.some(existingMsg => 
+        existingMsg.sendId === message.sendId && 
+        existingMsg.content === message.content && 
+        existingMsg.time === message.time
+      )
+      
+      if (!displayMessageExists) {
+        console.log('[发送私聊] 乐观更新：消息不存在于显示列表，添加')
+        messages.value.push(message)
+        console.log('[发送私聊] 乐观更新后messages.value长度:', messages.value.length)
+        scrollToBottom()
+      } else {
+        console.log('[发送私聊] 乐观更新：消息已存在于显示列表，跳过添加')
+      }
+    } else {
+      console.log('[发送私聊] 乐观更新：不在当前会话，消息已保存但不显示')
+    }
   } else {
     console.log('[发送私聊] 检测到重复消息，跳过乐观更新')
   }
@@ -818,19 +1072,25 @@ const startPrivateChat = (user: User) => {
   userSelectDialogVisible.value = false
   userSearchKeyword.value = ''
 
-  const convId = `private_${user.id}`
+  // 检查是否已经存在与该用户的私聊会话
+  let conv = conversations.value.find(c => 
+    c.type === 'private' && 
+    c.memberIds?.includes(user.id) && 
+    c.memberIds?.includes(userStore.userInfo?.id || '')
+  )
 
-  // 检查会话是否已存在
-  let conv = conversations.value.find(c => c.id === convId)
   if (!conv) {
-    // 创建新会话
+    // 创建新会话（使用临时ID，等待后端返回真实conversationId）
+    const tempConvId = `temp_private_${user.id}_${Date.now()}`
     conv = {
-      id: convId,
+      id: tempConvId,
       name: user.name,
       type: 'private',
-      lastMessage: ''
+      lastMessage: '',
+      memberIds: [userStore.userInfo?.id || '', user.id] // 添加成员ID列表
     }
     conversations.value.push(conv)
+    console.log('[创建私聊] 创建临时会话:', conv)
   }
 
   // 切换到该会话
@@ -870,10 +1130,117 @@ const handleMenuCommand = (command: string) => {
   if (command === 'ai') {
     switchConversation(conversations.value[0])
   } else if (command === 'group') {
-    switchConversation(conversations.value[1])
+    // 打开创建群聊对话框
+    isCreatingGroup.value = true
+    selectedUserIds.value = []
+    userSearchKeyword.value = ''
+    userSelectDialogVisible.value = true
   } else if (command === 'private') {
+    // 打开私聊对话框
+    isCreatingGroup.value = false
+    selectedUserIds.value = []
+    userSearchKeyword.value = ''
     userSelectDialogVisible.value = true
   }
+}
+
+// 处理用户选择
+const handleUserSelect = (user: User) => {
+  if (isCreatingGroup.value) {
+    // 群聊模式：切换选中状态
+    toggleUserSelection(user.id)
+  } else {
+    // 私聊模式：直接开始私聊
+    startPrivateChat(user)
+  }
+}
+
+// 切换用户选中状态
+const toggleUserSelection = (userId: string) => {
+  const index = selectedUserIds.value.indexOf(userId)
+  if (index > -1) {
+    selectedUserIds.value.splice(index, 1)
+  } else {
+    selectedUserIds.value.push(userId)
+  }
+}
+
+// 创建群聊
+const createGroupChat = async () => {
+  if (selectedUserIds.value.length < 2) {
+    ElMessage.warning('至少选择2个用户')
+    return
+  }
+
+  if (!wsClient || !wsClient.isConnected) {
+    ElMessage.warning('WebSocket未连接，无法创建群聊')
+    return
+  }
+
+  // 生成群ID和群名称
+  const groupId = `group_${Date.now()}`
+  const memberNames = selectedUserIds.value
+    .map(id => userList.value.find(u => u.id === id)?.name)
+    .filter(Boolean)
+    .slice(0, 3) // 最多显示3个名字
+  const groupName = memberNames.join('、') + (selectedUserIds.value.length > 3 ? '等' : '')
+
+  // 创建群聊会话（包含自己）
+  const allMemberIds = [...selectedUserIds.value, userStore.userInfo?.id || '']
+  const newGroup: Conversation = {
+    id: groupId,
+    name: groupName,
+    type: 'group',
+    lastMessage: '',
+    memberIds: allMemberIds,
+    creatorId: userStore.userInfo?.id,
+    createTime: Date.now()
+  }
+
+  // 在本地创建群聊会话
+  conversations.value.push(newGroup)
+
+  // 方案1：通过WebSocket发送系统消息（chatType: 99）通知所有成员
+  const groupCreateMessage: WsMessage = {
+    conversationId: groupId,
+    recvId: '', // 群消息，recvId为空
+    sendId: userStore.userInfo?.id || '',
+    chatType: 99, // 系统消息
+    content: `${userStore.userInfo?.name || '用户'}创建了群聊"${groupName}"`,
+    contentType: 1,
+    systemType: 'group_create',
+    groupInfo: {
+      groupId,
+      groupName,
+      memberIds: allMemberIds,
+      creatorId: userStore.userInfo?.id || ''
+    }
+  }
+
+  console.log('[创建群聊] 发送群聊创建通知（系统消息）:', groupCreateMessage)
+  wsClient.send(groupCreateMessage)
+
+  // 方案2：同时发送一条普通群消息，确保其他成员能收到群信息
+  // 这是一个兜底方案，防止后端不支持 chatType: 99
+  setTimeout(() => {
+    const welcomeMessage: WsMessage = {
+      conversationId: groupId,
+      recvId: '',
+      sendId: userStore.userInfo?.id || '',
+      chatType: 1, // 普通群聊消息
+      content: `${userStore.userInfo?.name}创建了群聊"${groupName}"，成员：${memberNames.join('、')}${selectedUserIds.value.length > 3 ? '等' : ''}`,
+      contentType: 1
+    }
+    console.log('[创建群聊] 发送欢迎消息:', welcomeMessage)
+    wsClient.send(welcomeMessage)
+  }, 100) // 延迟100ms，确保系统消息先发送
+
+  // 关闭对话框并切换到新群聊
+  userSelectDialogVisible.value = false
+  selectedUserIds.value = []
+  switchConversation(newGroup)
+
+  ElMessage.success(`群聊"${groupName}"创建成功`)
 }
 
 // 滚动到底部
@@ -1144,6 +1511,14 @@ onBeforeUnmount(() => {
 }
 
 /* 用户选择对话框样式 */
+.selected-users {
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  min-height: 40px;
+}
+
 .user-list {
   max-height: 400px;
   overflow-y: auto;
@@ -1156,16 +1531,29 @@ onBeforeUnmount(() => {
   padding: 12px;
   cursor: pointer;
   border-radius: 4px;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
+  position: relative;
 }
 
 .user-item:hover {
   background-color: #f5f7fa;
 }
 
+.user-item.selected {
+  background-color: #ecf5ff;
+  border-left: 3px solid #409eff;
+}
+
+.check-icon {
+  margin-left: auto;
+  color: #409eff;
+  font-size: 18px;
+}
+
 .user-name {
   font-size: 14px;
   color: #303133;
+  flex: 1;
 }
 
 .empty-text {

@@ -201,9 +201,17 @@ export interface WsMessage {
   conversationId: string // 群聊为"all"，私聊为两个用户ID组合
   recvId: string // 接收者ID（群聊时为空）
   sendId: string // 发送者ID
-  chatType: number // 1=群聊，2=私聊
+  chatType: number // 1=群聊，2=私聊，99=系统消息
   content: string
   contentType: number // 1=文字，2=图片，3=表情包等
+  // 系统消息扩展字段（用于群聊创建等通知）
+  systemType?: 'group_create' | 'group_dismiss' // 系统消息类型
+  groupInfo?: {
+    groupId: string
+    groupName: string
+    memberIds: string[]
+    creatorId: string
+  }
 }
 
 // 文件上传响应
