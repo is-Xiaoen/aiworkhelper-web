@@ -1,0 +1,14 @@
+修复私聊消息混乱的问题
+
+问题原因：
+1. 创建私聊时使用临时ID (temp_private_xxx)
+2. 发送和接收消息时使用不同的存储键
+3. 导致与不同人的消息混在一起
+
+解决方案：
+使用统一的存储键格式：private_${对方用户ID}
+
+关键修改点：
+1. startPrivateChat: 创建会话时使用 private_${user.id} 格式
+2. sendPrivateMessage: 发送消息时使用 private_${recvId} 存储
+3. handleReceiveMessage (私聊): 接收消息时使用 private_${otherUserId} 存储

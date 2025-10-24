@@ -455,14 +455,20 @@ const initWebSocket = async () => {
     await wsClient.connect()
     wsConnected.value = true
 
-    // 创建消息处理器并保存引用
-    messageHandler = (message: WsMessage) => {
-      handleReceiveMessage(message)
+    // 创建消息处理器并保存引用（只在第一次创建时）
+    if (!messageHandler) {
+      messageHandler = (message: WsMessage) => {
+        console.log('[WebSocket] 消息处理器被调用，处理消息:', message)
+        handleReceiveMessage(message)
+      }
+      
+      // 监听消息（只添加一次）
+      console.log('[WebSocket] 添加消息监听器')
+      wsClient.onMessage(messageHandler)
     }
-
-    // 监听消息（只添加一次）
-    console.log('[WebSocket] 添加消息监听器')
-    wsClient.onMessage(messageHandler)
+    
+    // 验证处理器是否已添加
+    console.log('[WebSocket] 验证处理器注册状态，当前处理器数量:', wsClient['messageHandlers']?.length || 0)
 
     ElMessage.success('WebSocket连接成功')
   } catch (error) {
@@ -593,60 +599,67 @@ const handleReceiveMessage = (wsMessage: WsMessage) => {
       conversationMessages[convId] = []
     }
 
-    // 去重检查：检查最近的消息中是否有相同的内容
-    // 由于群聊消息后端会回传给发送者，所以需要去重
-    const recentMessages = conversationMessages[convId].slice(-20) // 检查最近20条消息
-    const isDuplicate = recentMessages.some(m =>
+    // 去重检查：群聊消息去重
+    // 检查conversationMessages中是否已有相同的消息
+    const existsInStorage = conversationMessages[convId].some(m =>
       m.sendId === message.sendId &&
       m.content === message.content &&
       m.contentType === message.contentType &&
-      Math.abs(m.time - message.time) < 5 // 5秒内的相同消息视为重复
+      Math.abs(m.time - message.time) < 5
     )
 
-    console.log('[接收消息] 去重检查:', {
-      是否重复: isDuplicate,
-      最近消息数: recentMessages.length,
-      当前消息: { sendId: message.sendId, content: message.content.substring(0, 20) }
+    console.log('[接收消息-群聊] 去重检查:', {
+      conversationId: convId,
+      存储中消息数: conversationMessages[convId].length,
+      是否已存在: existsInStorage,
+      消息详情: { sendId: message.sendId, content: message.content.substring(0, 30), time: message.time }
     })
 
-    if (!isDuplicate) {
-      conversationMessages[convId].push(message)
+    if (existsInStorage) {
+      console.log('[接收消息-群聊] 检测到重复消息（存储中已存在），跳过添加')
+      return
+    }
 
-      // 更新会话列表的最后一条消息
-      const conv = conversations.value.find(c => c.id === convId)
-      if (conv) {
-        conv.lastMessage = message.contentType === 1 ? message.content : '[图片]'
+    // 添加到会话消息存储
+    conversationMessages[convId].push(message)
+    console.log('[接收消息-群聊] 消息已添加到存储，当前存储消息数:', conversationMessages[convId].length)
+
+    // 更新会话列表的最后一条消息
+    const conv = conversations.value.find(c => c.id === convId)
+    if (conv) {
+      conv.lastMessage = message.contentType === 1 ? message.content : '[图片]'
+    }
+
+    // 如果当前在该会话，更新显示列���并滚动
+    if (activeConversation.value === convId) {
+      // 再次检查显示列表中是否已存在（双重保险）
+      const existsInDisplay = messages.value.some(m =>
+        m.sendId === message.sendId &&
+        m.content === message.content &&
+        m.contentType === message.contentType &&
+        Math.abs(m.time - message.time) < 5
+      )
+
+      if (existsInDisplay) {
+        console.log('[接收消息-群聊] 检测到重复消息（显示列表中已存在），跳过显示')
+        return
       }
 
-    // 如果当前在该会话，更新消息列表并滚动
-    if (activeConversation.value === convId) {
-      console.log('[接收消息] 添加消息到当前显示列表')
-      console.log('[接收消息] 添加前messages.value长度:', messages.value.length)
-      console.log('[接收消息] 要添加的消息:', {
-        sendId: message.sendId,
-        content: message.content,
-        time: message.time
-      })
+      console.log('[接收消息-群聊] 添加消息到显示列表')
+      console.log('[接收消息-群聊] 添加前messages.value长度:', messages.value.length)
       messages.value.push(message)
-      console.log('[接收消息] 添加后messages.value长度:', messages.value.length)
+      console.log('[接收消息-群聊] 添加后messages.value长度:', messages.value.length)
       scrollToBottom()
     } else {
-      console.log('[接收消息] 不在当前会话，消息已保存但不显示')
-    }
-    } else {
-      console.log('[接收消息] 检测到重复消息，已忽略')
+      console.log('[接收消息-群聊] 不在当前会话，消息已保存但不显示')
     }
   } else if (wsMessage.chatType === 2) {
     // 私聊消息处理
-    // 使用后端返回的 conversationId，确保所有用户使用同一个会话ID
-    const convId = wsMessage.conversationId
-
     // 确定对话的另一方用户ID（用于显示头像和名称）
     const otherUserId = wsMessage.sendId === userStore.userInfo?.id ? wsMessage.recvId : wsMessage.sendId
 
-    console.log('[接收消息] 私聊消息:', {
+    console.log('[接收消息-私聊] 收到私聊消息:', {
       后端conversationId: wsMessage.conversationId,
-      使用的convId: convId,
       sendId: wsMessage.sendId,
       recvId: wsMessage.recvId,
       当前用户ID: userStore.userInfo?.id,
@@ -655,12 +668,18 @@ const handleReceiveMessage = (wsMessage: WsMessage) => {
       是自己发的: wsMessage.sendId === userStore.userInfo?.id
     })
 
-    if (!conversationMessages[convId]) {
-      conversationMessages[convId] = []
+    // 关键修复：使用对方用户ID作为存储键，而不是后端的conversationId
+    // 这样可以确保与同一个人的所有消息都存储在同一个地方
+    const storageKey = `private_${otherUserId}`
+
+    if (!conversationMessages[storageKey]) {
+      conversationMessages[storageKey] = []
     }
 
+    console.log('[接收消息-私聊] 使用存储键:', storageKey)
+
     // 去重检查：私聊消息也需要去重
-    const recentMessages = conversationMessages[convId].slice(-10)
+    const recentMessages = conversationMessages[storageKey].slice(-10)
     const isDuplicate = recentMessages.some(m =>
       m.sendId === message.sendId &&
       m.content === message.content &&
@@ -669,90 +688,74 @@ const handleReceiveMessage = (wsMessage: WsMessage) => {
     )
 
     if (isDuplicate) {
-      console.log('[接收消息] 检测到重复的私聊消息，已忽略')
+      console.log('[接收消息-私聊] 检测到重复的私聊消息，已忽略')
       return
     }
 
     // 特殊处理：如果是自己发送的消息回显，且已经通过乐观更新添加过，则跳过
-    console.log('[接收消息] 检查消息发送者ID:', wsMessage.sendId, '当前用户ID:', userStore.userInfo?.id)
+    console.log('[接收消息-私聊] 检查消息发送者ID:', wsMessage.sendId, '当前用户ID:', userStore.userInfo?.id)
     if (wsMessage.sendId === userStore.userInfo?.id) {
-      console.log('[接收消息] 收到自己发送的消息回显，跳过添加（已通过乐观更新处理）')
+      console.log('[接收消息-私聊] 收到自己发送的消息回显，跳过添加（已通过乐观更新处理）')
       return
     }
 
-    conversationMessages[convId].push(message)
+    // 添加到消息存储
+    conversationMessages[storageKey].push(message)
+    console.log('[接收消息-私聊] 消息已添加到存储，当前存储消息数:', conversationMessages[storageKey].length)
 
     // 查找或创建私聊会话
-    // 注意：可能已经存在使用旧格式 private_${otherUserId} 的会话，需要查找并更新
-    let conv = conversations.value.find(c => c.id === convId || (c.type === 'private' && c.memberIds?.includes(otherUserId)))
+    // 使用 memberIds 来查找会话（而不是会话ID）
+    let conv = conversations.value.find(c =>
+      c.type === 'private' &&
+      c.memberIds?.includes(otherUserId) &&
+      c.memberIds?.includes(userStore.userInfo?.id || '')
+    )
 
     if (!conv) {
-      // 创建新的私聊会话
+      // 创建新的私聊会话，使用统一的会话ID格式
       const otherUser = userList.value.find(u => u.id === otherUserId)
       conv = {
-        id: convId, // 使用后端返回的 conversationId
+        id: storageKey, // 使用与存储键相同的格式
         name: otherUser?.name || '用户' + otherUserId.slice(0, 4),
         type: 'private',
         lastMessage: message.contentType === 1 ? message.content : '[图片]',
         memberIds: [userStore.userInfo?.id || '', otherUserId] // 存储双方用户ID
       }
       conversations.value.push(conv)
-      console.log('[接收消息] 创建新的私聊会话:', conv)
+      console.log('[接收消息-私聊] 创建新的私聊会话:', conv)
     } else {
-      // 更新已有会话
-      const oldConvId = conv.id
-      if (oldConvId !== convId) {
-        // 如果是旧格式的会话，更新为新的 conversationId
-        console.log('[接收消息] 更新会话ID:', { 旧ID: oldConvId, 新ID: convId })
-
-        // 迁移消息历史
-        if (conversationMessages[oldConvId]) {
-          conversationMessages[convId] = [...(conversationMessages[convId] || []), ...conversationMessages[oldConvId]]
-          delete conversationMessages[oldConvId]
-        }
-
-        // 更新会话ID
-        conv.id = convId
-
-        // 如果当前正在查看这个会话，需要更新 activeConversation
-        if (activeConversation.value === oldConvId) {
-          console.log('[接收消息] 更新当前活动会话ID:', convId)
-          activeConversation.value = convId
-          // 重新加载消息列表
-          messages.value = conversationMessages[convId] || []
-        }
-      }
+      // 更新已有会话的最后消息
       conv.lastMessage = message.contentType === 1 ? message.content : '[图片]'
-      console.log('[接收消息] 更新已有私聊会话:', conv)
+      console.log('[接收消息-私聊] 更新已有私聊会话:', conv)
     }
 
     // 如果当前在该会话，更新消息列表并滚动
-    if (activeConversation.value === convId) {
-      console.log('[接收消息] 私聊-添加消息到当前显示列表')
-      console.log('[接收消息] 私聊-添加前messages.value长度:', messages.value.length)
-      console.log('[接收消息] 私聊-要添加的消息:', {
+    if (activeConversation.value === conv.id) {
+      console.log('[接收消息-私聊] 添加消息到当前显示列表')
+      console.log('[接收消息-私聊] 添加前messages.value长度:', messages.value.length)
+      console.log('[接收消息-私聊] 要添加的消息:', {
         sendId: message.sendId,
         content: message.content,
         time: message.time
       })
-      
+
       // 检查消息是否已存在（避免WebSocket回显导致的重复）
-      const messageExists = messages.value.some(existingMsg => 
-        existingMsg.sendId === message.sendId && 
-        existingMsg.content === message.content && 
+      const messageExists = messages.value.some(existingMsg =>
+        existingMsg.sendId === message.sendId &&
+        existingMsg.content === message.content &&
         existingMsg.time === message.time
       )
-      
+
       if (!messageExists) {
-        console.log('[接收消息] 私聊-消息不存在，添加到显示列表')
+        console.log('[接收消息-私聊] 消息不存在，添加到显示列表')
         messages.value.push(message)
-        console.log('[接收消息] 私聊-添加后messages.value长度:', messages.value.length)
+        console.log('[接收消息-私聊] 添加后messages.value长度:', messages.value.length)
         scrollToBottom()
       } else {
-        console.log('[接收消息] 私聊-消息已存在，跳过添加（避免重复）')
+        console.log('[接收消息-私聊] 消息已存在，跳过添加（避免重复）')
       }
     } else {
-      console.log('[接收消息] 不在当前会话，私聊消息已保存但不显示')
+      console.log('[接收消息-私聊] 不在当前会话，私聊消息已保存但不显示')
     }
   }
 }
@@ -962,14 +965,18 @@ const sendPrivateMessage = async () => {
     isSelf: true
   }
 
-  // 添加到会话消息记录
-  const convId = activeConversation.value
-  if (!conversationMessages[convId]) {
-    conversationMessages[convId] = []
+  // 关键修复：使用对方用户ID作为会话存储的键，而不是临时会话ID
+  // 这样可以确保与同一个人的所有消息都存储在同一个地方
+  const storageKey = `private_${recvId}` // 使用统一的存储键格式
+
+  if (!conversationMessages[storageKey]) {
+    conversationMessages[storageKey] = []
   }
 
+  console.log('[发送私聊] 使用存储键:', storageKey, '当前会话ID:', activeConversation.value)
+
   // 去重检查再添加
-  const recentMessages = conversationMessages[convId].slice(-10)
+  const recentMessages = conversationMessages[storageKey].slice(-10)
   const isDuplicate = recentMessages.some(m =>
     m.sendId === message.sendId &&
     m.content === message.content &&
@@ -978,27 +985,27 @@ const sendPrivateMessage = async () => {
   )
 
   if (!isDuplicate) {
-    console.log('[发送私聊] 乐观更新：添加到本地消息列表')
+    console.log('[发送私聊] 乐观更新：添加到本地消息存储')
     console.log('[发送私聊] 乐观更新消息详情:', {
       sendId: message.sendId,
       content: message.content,
       time: message.time,
-      convId: convId
+      storageKey: storageKey
     })
-    conversationMessages[convId].push(message)
-    
+    conversationMessages[storageKey].push(message)
+
     // 只有在当前会话中才添加到显示列表
-    if (activeConversation.value === convId) {
+    if (activeConversation.value === currentConv.id) {
       console.log('[发送私聊] 乐观更新：添加到当前显示列表')
       console.log('[发送私聊] 乐观更新前messages.value长度:', messages.value.length)
-      
+
       // 检查显示列表中是否已存在该消息（避免重复显示）
-      const displayMessageExists = messages.value.some(existingMsg => 
-        existingMsg.sendId === message.sendId && 
-        existingMsg.content === message.content && 
+      const displayMessageExists = messages.value.some(existingMsg =>
+        existingMsg.sendId === message.sendId &&
+        existingMsg.content === message.content &&
         existingMsg.time === message.time
       )
-      
+
       if (!displayMessageExists) {
         console.log('[发送私聊] 乐观更新：消息不存在于显示列表，添加')
         messages.value.push(message)
@@ -1073,24 +1080,25 @@ const startPrivateChat = (user: User) => {
   userSearchKeyword.value = ''
 
   // 检查是否已经存在与该用户的私聊会话
-  let conv = conversations.value.find(c => 
-    c.type === 'private' && 
-    c.memberIds?.includes(user.id) && 
+  let conv = conversations.value.find(c =>
+    c.type === 'private' &&
+    c.memberIds?.includes(user.id) &&
     c.memberIds?.includes(userStore.userInfo?.id || '')
   )
 
   if (!conv) {
-    // 创建新会话（使用临时ID，等待后端返回真实conversationId）
-    const tempConvId = `temp_private_${user.id}_${Date.now()}`
+    // 关键修复：使用统一的会话ID格式 private_${对方用户ID}
+    // 这样会话ID、存储键、显示都使用同一个标识符
+    const conversationId = `private_${user.id}`
     conv = {
-      id: tempConvId,
+      id: conversationId,
       name: user.name,
       type: 'private',
       lastMessage: '',
       memberIds: [userStore.userInfo?.id || '', user.id] // 添加成员ID列表
     }
     conversations.value.push(conv)
-    console.log('[创建私聊] 创建临时会话:', conv)
+    console.log('[创建私聊] 创建会话（使用统一ID格式）:', conv)
   }
 
   // 切换到该会话
@@ -1185,62 +1193,33 @@ const createGroupChat = async () => {
     .slice(0, 3) // 最多显示3个名字
   const groupName = memberNames.join('、') + (selectedUserIds.value.length > 3 ? '等' : '')
 
-  // 创建群聊会话（包含自己）
-  const allMemberIds = [...selectedUserIds.value, userStore.userInfo?.id || '']
-  const newGroup: Conversation = {
-    id: groupId,
-    name: groupName,
-    type: 'group',
-    lastMessage: '',
-    memberIds: allMemberIds,
-    creatorId: userStore.userInfo?.id,
-    createTime: Date.now()
-  }
+  console.log('[创建群聊] 准备创建群聊:', {
+    groupId,
+    groupName,
+    memberIds: [...selectedUserIds.value, userStore.userInfo?.id || '']
+  })
 
-  // 在本地创建群聊会话
-  conversations.value.push(newGroup)
+  // 不在本地立即创建会话，等待 WebSocket 回传后自动创建
+  // 这样可以避免创建者看到重复的群聊图标
 
-  // 方案1：通过WebSocket发送系统消息（chatType: 99）通知所有成员
-  const groupCreateMessage: WsMessage = {
+  // 只发送一条普通群消息
+  const welcomeMessage: WsMessage = {
     conversationId: groupId,
-    recvId: '', // 群消息，recvId为空
+    recvId: '',
     sendId: userStore.userInfo?.id || '',
-    chatType: 99, // 系统消息
-    content: `${userStore.userInfo?.name || '用户'}创建了群聊"${groupName}"`,
-    contentType: 1,
-    systemType: 'group_create',
-    groupInfo: {
-      groupId,
-      groupName,
-      memberIds: allMemberIds,
-      creatorId: userStore.userInfo?.id || ''
-    }
+    chatType: 1, // 普通群聊消息
+    content: `${userStore.userInfo?.name}创建了群聊"${groupName}"，成员：${memberNames.join('、')}${selectedUserIds.value.length > 3 ? '等' : ''}`,
+    contentType: 1
   }
 
-  console.log('[创建群聊] 发送群聊创建通知（系统消息）:', groupCreateMessage)
-  wsClient.send(groupCreateMessage)
+  console.log('[创建群聊] 发送欢迎消息（等待WebSocket回传创建会话）:', welcomeMessage)
+  wsClient.send(welcomeMessage)
 
-  // 方案2：同时发送一条普通群消息，确保其他成员能收到群信息
-  // 这是一个兜底方案，防止后端不支持 chatType: 99
-  setTimeout(() => {
-    const welcomeMessage: WsMessage = {
-      conversationId: groupId,
-      recvId: '',
-      sendId: userStore.userInfo?.id || '',
-      chatType: 1, // 普通群聊消息
-      content: `${userStore.userInfo?.name}创建了群聊"${groupName}"，成员：${memberNames.join('、')}${selectedUserIds.value.length > 3 ? '等' : ''}`,
-      contentType: 1
-    }
-    console.log('[创建群聊] 发送欢迎消息:', welcomeMessage)
-    wsClient.send(welcomeMessage)
-  }, 100) // 延迟100ms，确保系统消息先发送
-
-  // 关闭对话框并切换到新群聊
+  // 关闭对话框
   userSelectDialogVisible.value = false
   selectedUserIds.value = []
-  switchConversation(newGroup)
 
-  ElMessage.success(`群聊"${groupName}"创建成功`)
+  ElMessage.success(`正在创建群聊"${groupName}"...`)
 }
 
 // 滚动到底部

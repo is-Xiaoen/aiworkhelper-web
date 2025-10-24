@@ -9,6 +9,7 @@ export class WebSocketClient {
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private messageHandlers: ((message: WsMessage) => void)[] = []
+  private savedHandlers: ((message: WsMessage) => void)[] = [] // 保存处理器引用用于重连
 
   constructor(url: string, token: string) {
     this.url = url
@@ -73,6 +74,7 @@ export class WebSocketClient {
   onMessage(handler: (message: WsMessage) => void): void {
     console.log(`[WebSocket] 添加消息处理器，当前共${this.messageHandlers.length + 1}个`)
     this.messageHandlers.push(handler)
+    this.savedHandlers.push(handler) // 同时保存到savedHandlers
   }
 
   // 移除消息处理器
@@ -80,6 +82,10 @@ export class WebSocketClient {
     const index = this.messageHandlers.indexOf(handler)
     if (index > -1) {
       this.messageHandlers.splice(index, 1)
+    }
+    const savedIndex = this.savedHandlers.indexOf(handler)
+    if (savedIndex > -1) {
+      this.savedHandlers.splice(savedIndex, 1)
     }
   }
 
@@ -105,7 +111,11 @@ export class WebSocketClient {
       console.log(`尝试重连WebSocket (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
 
       this.reconnectTimer = setTimeout(() => {
-        this.connect().catch(error => {
+        this.connect().then(() => {
+          // 重连成功后，重新注册所有保存的处理器
+          this.messageHandlers = [...this.savedHandlers]
+          console.log(`[WebSocket] 重连成功，重新注册了${this.messageHandlers.length}个处理器`)
+        }).catch(error => {
           console.error('重连失败:', error)
         })
       }, 3000 * this.reconnectAttempts)
