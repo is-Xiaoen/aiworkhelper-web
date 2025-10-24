@@ -160,14 +160,39 @@
                 </el-select>
               </div>
 
-              <div class="input-box">
+              <div class="input-box" style="position: relative;">
                 <el-input
+                  ref="inputRef"
                   v-model="inputMessage"
                   type="textarea"
                   :rows="3"
-                  placeholder="请输入消息..."
+                  :placeholder="currentChatType === 'group' ? '输入 @ 可提及群成员或AI...' : '请输入消息...'"
                   @keydown.enter.ctrl="handleSend"
+                  @input="handleInputChange"
+                  @keydown="handleKeyDown"
                 />
+
+                <!-- @ 提及选择器 -->
+                <div
+                  v-if="showMentionList && currentChatType === 'group'"
+                  class="mention-list"
+                  :style="{ bottom: mentionListBottom + 'px' }"
+                >
+                  <div
+                    v-for="(item, index) in mentionFilteredList"
+                    :key="item.id"
+                    :class="['mention-item', { active: mentionSelectedIndex === index }]"
+                    @click="selectMention(item)"
+                    @mouseenter="mentionSelectedIndex = index"
+                  >
+                    <el-avatar :size="32">{{ item.name[0] }}</el-avatar>
+                    <span class="mention-name">{{ item.name }}</span>
+                  </div>
+                  <div v-if="mentionFilteredList.length === 0" class="mention-empty">
+                    无匹配结果
+                  </div>
+                </div>
+
                 <el-button
                   type="primary"
                   :loading="sending"
@@ -274,10 +299,23 @@ interface Conversation {
 }
 
 const messageListRef = ref<HTMLElement>()
+const inputRef = ref()
 const messages = ref<Message[]>([])
 const inputMessage = ref('')
 const sending = ref(false)
 const aiLoading = ref(false)
+
+// @ 提及功能相关
+const showMentionList = ref(false)
+const mentionSearchText = ref('')
+const mentionSelectedIndex = ref(0)
+const mentionListBottom = ref(100) // 选择器距离底部的距离
+
+interface MentionItem {
+  id: string
+  name: string
+  type: 'user' | 'ai'
+}
 
 // 用户列表相关
 const userList = ref<User[]>([])
@@ -390,6 +428,47 @@ const filteredUsers = computed(() => {
   )
 })
 
+// @ 提及候选列表
+const mentionCandidates = computed<MentionItem[]>(() => {
+  const candidates: MentionItem[] = []
+
+  // 添加 AI 助手
+  candidates.push({
+    id: 'ai',
+    name: 'AI助手',
+    type: 'ai'
+  })
+
+  // 添加群成员
+  const currentConv = conversations.value.find(c => c.id === activeConversation.value)
+  if (currentConv && currentConv.type === 'group' && currentConv.memberIds) {
+    currentConv.memberIds.forEach(memberId => {
+      if (memberId !== userStore.userInfo?.id) {
+        const user = userList.value.find(u => u.id === memberId)
+        if (user) {
+          candidates.push({
+            id: user.id,
+            name: user.name,
+            type: 'user'
+          })
+        }
+      }
+    })
+  }
+
+  return candidates
+})
+
+// 根据搜索文本过滤 @ 提及列表
+const mentionFilteredList = computed(() => {
+  if (!mentionSearchText.value) {
+    return mentionCandidates.value
+  }
+  return mentionCandidates.value.filter(item =>
+    item.name.toLowerCase().includes(mentionSearchText.value.toLowerCase())
+  )
+})
+
 // 判断用户是否在线（通过账户状态判断）
 const isUserOnline = (userId: string) => {
   // 当前登录用户始终在线
@@ -413,6 +492,94 @@ const startPrivateChatWithUser = (user: User) => {
 
 const formatTime = (timestamp: number) => {
   return dayjs.unix(timestamp).format('HH:mm:ss')
+}
+
+// 处理输入变化，检测 @ 符号
+const handleInputChange = () => {
+  const text = inputMessage.value
+  const cursorPos = inputRef.value?.$refs?.textarea?.selectionStart || text.length
+
+  // 查找最近的 @ 符号位置
+  let atPos = -1
+  for (let i = cursorPos - 1; i >= 0; i--) {
+    if (text[i] === '@') {
+      atPos = i
+      break
+    }
+    if (text[i] === ' ' || text[i] === '\n') {
+      break
+    }
+  }
+
+  if (atPos !== -1 && currentChatType.value === 'group') {
+    // 提取 @ 后的搜索文本
+    const searchText = text.substring(atPos + 1, cursorPos)
+    mentionSearchText.value = searchText
+    showMentionList.value = true
+    mentionSelectedIndex.value = 0
+  } else {
+    showMentionList.value = false
+    mentionSearchText.value = ''
+  }
+}
+
+// 处理键盘事件（上下箭头选择，回车确认）
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (!showMentionList.value) return
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    mentionSelectedIndex.value = Math.min(
+      mentionSelectedIndex.value + 1,
+      mentionFilteredList.value.length - 1
+    )
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    mentionSelectedIndex.value = Math.max(mentionSelectedIndex.value - 1, 0)
+  } else if (event.key === 'Enter' && !event.ctrlKey && !event.shiftKey) {
+    event.preventDefault()
+    if (mentionFilteredList.value[mentionSelectedIndex.value]) {
+      selectMention(mentionFilteredList.value[mentionSelectedIndex.value])
+    }
+  } else if (event.key === 'Escape') {
+    showMentionList.value = false
+  }
+}
+
+// 选择提及的用户或AI
+const selectMention = (item: MentionItem) => {
+  const text = inputMessage.value
+  const cursorPos = inputRef.value?.$refs?.textarea?.selectionStart || text.length
+
+  // 查找最近的 @ 符号位置
+  let atPos = -1
+  for (let i = cursorPos - 1; i >= 0; i--) {
+    if (text[i] === '@') {
+      atPos = i
+      break
+    }
+  }
+
+  if (atPos !== -1) {
+    // 替换 @ 后的文本为选中的名称
+    const before = text.substring(0, atPos)
+    const after = text.substring(cursorPos)
+    inputMessage.value = before + '@' + item.name + ' ' + after
+
+    // 隐藏选择列表
+    showMentionList.value = false
+    mentionSearchText.value = ''
+
+    // 重新聚焦输入框
+    nextTick(() => {
+      const textarea = inputRef.value?.$refs?.textarea
+      if (textarea) {
+        textarea.focus()
+        const newPos = (before + '@' + item.name + ' ').length
+        textarea.setSelectionRange(newPos, newPos)
+      }
+    })
+  }
 }
 
 // 初始化WebSocket连接
@@ -469,10 +636,11 @@ const initWebSocket = async () => {
 
 // 接收消息
 const handleReceiveMessage = (wsMessage: WsMessage) => {
-  console.log('[接收消息] 收到WebSocket消息:', wsMessage)
+  try {
+    console.log('[接收消息] 收到WebSocket消息:', wsMessage)
 
-  // 处理系统消息（群聊创建通知等）
-  if (wsMessage.chatType === 99) {
+    // 处理系统消息（群聊创建通知等）
+    if (wsMessage.chatType === 99) {
     console.log('[接收消息] 收到系统消息:', wsMessage.systemType)
 
     if (wsMessage.systemType === 'group_create' && wsMessage.groupInfo) {
@@ -518,9 +686,16 @@ const handleReceiveMessage = (wsMessage: WsMessage) => {
 
   // 获取发送者名称
   const senderUser = userList.value.find(u => u.id === wsMessage.sendId)
-  const senderName = wsMessage.sendId === userStore.userInfo?.id
-    ? '我'
-    : (senderUser?.name || '用户' + wsMessage.sendId.slice(0, 4))
+  let senderName: string
+  if (wsMessage.sendId === userStore.userInfo?.id) {
+    senderName = '我'
+  } else if (wsMessage.sendId === 'ai') {
+    senderName = 'AI助手'
+  } else if (senderUser) {
+    senderName = senderUser.name
+  } else {
+    senderName = '用户' + (wsMessage.sendId?.slice(0, 4) || 'unknown')
+  }
 
   const message: Message = {
     sendId: wsMessage.sendId,
@@ -748,6 +923,10 @@ const handleReceiveMessage = (wsMessage: WsMessage) => {
       console.log('[接收消息-私聊] 不在当前会话，私聊消息已保存但不显示')
     }
   }
+  } catch (error) {
+    console.error('[接收消息-错误] WebSocket消息处理失败:', error)
+    console.error('[接收消息-错误] 原始消息:', wsMessage)
+  }
 }
 
 // 发送消息
@@ -758,9 +937,9 @@ const handleSend = async () => {
     // AI对话
     await sendAIMessage()
   } else if (currentChatType.value === 'group') {
-    // 群聊 - 检查是否 @AI
+    // 群聊 - 检查是否 @AI助手 或 @AI
     const content = inputMessage.value.trim()
-    if (content.startsWith('@AI') || content.startsWith('@ai')) {
+    if (content.includes('@AI助手') || content.includes('@AI') || content.includes('@ai')) {
       await sendAIMessageInGroup()
     } else {
       await sendGroupMessage()
@@ -851,13 +1030,16 @@ const sendAIMessageInGroup = async () => {
   const content = inputMessage.value.trim()
   if (!content) return
 
-  // 移除 @AI 前缀
-  const prompt = content.replace(/^@AI\s*/i, '')
+  // 获取当前群聊ID
+  const currentGroupId = activeConversation.value
+
+  // 移除 @AI助手 或 @AI 前缀
+  const prompt = content.replace(/@AI助手\s*/gi, '').replace(/@AI\s*/gi, '')
 
   // 先发送用户消息到群聊
   if (wsClient && wsClient.isConnected) {
     const wsMessage: WsMessage = {
-      conversationId: 'all',
+      conversationId: currentGroupId,
       recvId: '',
       sendId: userStore.userInfo?.id || '',
       chatType: 1,
@@ -865,38 +1047,76 @@ const sendAIMessageInGroup = async () => {
       contentType: 1
     }
     wsClient.send(wsMessage)
-    console.log('群聊@AI消息已发送，等待WebSocket回传确认')
+    console.log('[群聊@AI] 用户消息已发送，等待WebSocket回传确认')
   }
 
   inputMessage.value = ''
 
-  // 调用 AI 接口
+  // 调用 AI 接口进行群消息总结
   aiLoading.value = true
   try {
+    // 获取当前时间和24小时前的时间戳（用于总结最近的群消息）
+    const now = Date.now()
+    const oneDayAgo = now - 24 * 60 * 60 * 1000
+
+    console.log('[群聊@AI] 准备调用API，当前群聊ID:', currentGroupId)
+
     const res = await chat({
       prompts: prompt,
-      chatType: aiChatType.value
+      chatType: 0,  // 使用默认值0，让后端智能路由自动识别为群消息总结
+      relationId: currentGroupId,  // 传递当前群聊的conversationId，后端会查询该群的消息
+      startTime: Math.floor(oneDayAgo / 1000),  // 开始时间（秒级时间戳）
+      endTime: Math.floor(now / 1000)  // 结束时间（秒级时间戳）
     })
 
+    console.log('[群聊@AI] 后端API响应:', res)
+
     if (res.code === 200) {
-      const aiResponse = typeof res.data.data === 'string' ? res.data.data : JSON.stringify(res.data.data, null, 2)
+      // 增强数据处理：支持多种返回格式
+      let aiResponse = ''
+
+      if (res.data && res.data.data) {
+        // 如果返回的是数组（总结结果），格式化展示
+        if (Array.isArray(res.data.data)) {
+          const summaries = res.data.data.map((item: any, index: number) => {
+            const typeLabel = item.Type === 1 ? '📋 待办任务' : '📝 审批事项'
+            return `${index + 1}. ${typeLabel}: ${item.Title}\n   ${item.Content}`
+          }).join('\n\n')
+          aiResponse = summaries || '暂无总结内容'
+        } else if (typeof res.data.data === 'string') {
+          aiResponse = res.data.data
+        } else {
+          aiResponse = JSON.stringify(res.data.data, null, 2)
+        }
+      } else if (res.data && typeof res.data === 'string') {
+        aiResponse = res.data
+      } else {
+        console.warn('[群聊@AI] 后端返回数据格式异常:', res.data)
+        aiResponse = '暂无群消息总结'
+      }
+
+      console.log('[群聊@AI] 处理后的AI回复:', aiResponse)
 
       // 将 AI 回复发送到群聊
       if (wsClient && wsClient.isConnected) {
         const wsMessage: WsMessage = {
-          conversationId: 'all',
+          conversationId: currentGroupId,
           recvId: '',
           sendId: 'ai',
           chatType: 1,
-          content: `AI回复: ${aiResponse}`,
+          content: `AI回复:\n${aiResponse}`,
           contentType: 1
         }
         wsClient.send(wsMessage)
-        console.log('AI回复已发送到群聊，等待WebSocket回传确认')
+        console.log('[群聊@AI] AI回复已发送到群聊，等待WebSocket回传确认')
       }
+    } else {
+      console.error('[群聊@AI] 后端返回错误:', res.code, res.msg)
+      ElMessage.error(`AI总结失败: ${res.msg || '未知错误'}`)
     }
   } catch (error) {
-    ElMessage.error('AI请求失败')
+    console.error('[群聊@AI] AI请求失败:', error)
+    ElMessage.error('AI请求失败，请检查网络连接')
   } finally {
     aiLoading.value = false
   }
@@ -1490,5 +1710,45 @@ onBeforeUnmount(() => {
   padding: 40px 0;
   color: #909399;
   font-size: 14px;
+}
+
+/* @ 提及选择器样式 */
+.mention-list {
+  position: absolute;
+  left: 0;
+  right: 50px;
+  background: white;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.mention-item:hover,
+.mention-item.active {
+  background-color: #f5f7fa;
+}
+
+.mention-name {
+  font-size: 14px;
+  color: #303133;
+}
+
+.mention-empty {
+  padding: 12px;
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
 }
 </style>
