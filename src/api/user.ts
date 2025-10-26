@@ -53,11 +53,11 @@ export function deleteUser(id: string): Promise<ApiResponse> {
 }
 
 // 获取用户列表
-export function getUserList(data: UserListParams): Promise<ApiResponse<PageData<User>>> {
+export function getUserList(params: UserListParams): Promise<ApiResponse<PageData<User>>> {
   return request({
     url: '/v1/user/list',
     method: 'get',
-    data  // 使用 data 而不是 params，将参数放在请求体中
+    params
   })
 }
 

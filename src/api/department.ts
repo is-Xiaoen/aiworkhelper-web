@@ -52,6 +52,24 @@ export function setDepUser(data: SetDepUserRequest): Promise<ApiResponse> {
   })
 }
 
+// 添加部门员工
+export function addDepUser(data: { depId: string; userId: string }): Promise<ApiResponse> {
+  return request({
+    url: '/v1/dep/user/add',
+    method: 'post',
+    data
+  })
+}
+
+// 删除部门员工
+export function removeDepUser(data: { depId: string; userId: string }): Promise<ApiResponse> {
+  return request({
+    url: '/v1/dep/user/remove',
+    method: 'delete',
+    data
+  })
+}
+
 // 获取用户部门信息
 export function getUserDep(id: string): Promise<ApiResponse<DepUser>> {
   return request({
