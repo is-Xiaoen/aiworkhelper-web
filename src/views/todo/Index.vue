@@ -45,6 +45,14 @@
         <el-table-column prop="title" label="标题" min-width="200" />
         <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
         <el-table-column prop="creatorName" label="创建人" width="120" />
+        <el-table-column label="执行人" width="150">
+          <template #default="{ row }">
+            <span v-if="row.executeIds && row.executeIds.length > 0">
+              {{ row.executeIds.join(', ') }}
+            </span>
+            <span v-else style="color: #999;">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="截止时间" width="180">
           <template #default="{ row }">
             {{ formatDate(row.deadlineAt) }}
@@ -62,7 +70,7 @@
             <el-button text type="primary" @click="handleView(row)">查看</el-button>
             <el-button text type="primary" @click="handleEdit(row)">编辑</el-button>
             <el-button
-              v-if="row.status !== 2"
+              v-if="row.status !== 3"
               text
               type="success"
               @click="handleFinish(row)"
@@ -137,9 +145,10 @@
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-radio-group v-model="form.status">
-            <el-radio :label="0">未发布</el-radio>
-            <el-radio :label="1">进行中</el-radio>
-            <el-radio :label="2">已完成</el-radio>
+            <el-radio :label="1">待处理</el-radio>
+            <el-radio :label="2">进行中</el-radio>
+            <el-radio :label="3">已完成</el-radio>
+            <el-radio :label="4">已取消</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -238,12 +247,12 @@ const formatDate = (timestamp: number) => {
 }
 
 const getStatusType = (status: number) => {
-  const types: any = { 0: 'info', 1: 'warning', 2: 'success' }
+  const types: any = { 1: 'info', 2: 'warning', 3: 'success', 4: 'info', 5: 'danger' }
   return types[status] || 'info'
 }
 
 const getStatusText = (status: number) => {
-  const texts: any = { 0: '未发布', 1: '进行中', 2: '已完成' }
+  const texts: any = { 1: '待处理', 2: '进行中', 3: '已完成', 4: '已取消', 5: '已超时' }
   return texts[status] || '未知'
 }
 
@@ -345,11 +354,17 @@ const handleSubmit = async () => {
   await formRef.value.validate(async (valid) => {
     if (valid) {
       try {
+        // 确保 deadlineAt 是数字类型
+        const submitData = {
+          ...form,
+          deadlineAt: typeof form.deadlineAt === 'string' ? parseInt(form.deadlineAt) : form.deadlineAt
+        }
+
         if (form.id) {
-          await updateTodo(form as Todo)
+          await updateTodo(submitData as Todo)
           ElMessage.success('更新成功')
         } else {
-          await createTodo(form as Todo)
+          await createTodo(submitData as Todo)
           ElMessage.success('创建成功')
         }
         dialogVisible.value = false
