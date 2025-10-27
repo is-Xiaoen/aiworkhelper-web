@@ -11,13 +11,19 @@
         </div>
       </template>
 
+      <!-- 选项卡：我提交的/待我审批 -->
+      <el-tabs v-model="activeTab" @tab-change="handleTabChange" style="margin-bottom: 20px;">
+        <el-tab-pane label="我提交的" name="submit"></el-tab-pane>
+        <el-tab-pane label="待我审批" name="audit"></el-tab-pane>
+      </el-tabs>
+
       <!-- 筛选区域 -->
       <el-form :model="queryParams" inline>
         <el-form-item label="审批类型">
-          <el-select v-model="queryParams.type" placeholder="全部" clearable>
-            <el-option label="请假" :value="1" />
-            <el-option label="补卡" :value="2" />
-            <el-option label="外出" :value="3" />
+          <el-select v-model="queryParams.approvalType" placeholder="全部" clearable>
+            <el-option label="请假" :value="2" />
+            <el-option label="补卡" :value="3" />
+            <el-option label="外出" :value="4" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -56,18 +62,18 @@
           <template #default="{ row }">
             <el-button text type="primary" @click="handleView(row)">查看</el-button>
             <el-button
-              v-if="row.status === 0"
+              v-if="row.status === 1 && row.participatingId === userStore.userInfo?.id"
               text
               type="success"
-              @click="handleApprove(row, 1)"
+              @click="handleApprove(row, 2)"
             >
               通过
             </el-button>
             <el-button
-              v-if="row.status === 0"
+              v-if="row.status === 1 && row.participatingId === userStore.userInfo?.id"
               text
               type="danger"
-              @click="handleApprove(row, 2)"
+              @click="handleApprove(row, 3)"
             >
               拒绝
             </el-button>
@@ -102,22 +108,22 @@
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="摘要" :span="2">{{ viewData.abstract }}</el-descriptions-item>
-        <el-descriptions-item label="原因" :span="2">{{ viewData.reason }}</el-descriptions-item>
 
         <!-- 请假信息 -->
-        <template v-if="viewData.type === 1 && viewData.leave">
-          <el-descriptions-item label="请假类型">{{ viewData.leave.type }}</el-descriptions-item>
-          <el-descriptions-item label="时长">{{ viewData.leave.duration }} {{ viewData.leave.timeType === 1 ? '小时' : '天' }}</el-descriptions-item>
+        <template v-if="viewData.type === 2 && viewData.leave">
+          <el-descriptions-item label="请假类型">{{ getLeaveTypeText(viewData.leave.type) }}</el-descriptions-item>
+          <el-descriptions-item label="时长类型">{{ viewData.leave.timeType === 1 ? '小时' : '天' }}</el-descriptions-item>
           <el-descriptions-item label="开始时间" :span="2">
             {{ formatDate(viewData.leave.startTime) }}
           </el-descriptions-item>
           <el-descriptions-item label="结束时间" :span="2">
             {{ formatDate(viewData.leave.endTime) }}
           </el-descriptions-item>
+          <el-descriptions-item label="请假原因" :span="2">{{ viewData.leave.reason || '-' }}</el-descriptions-item>
         </template>
 
         <!-- 补卡信息 -->
-        <template v-if="viewData.type === 2 && viewData.makeCard">
+        <template v-if="viewData.type === 3 && viewData.makeCard">
           <el-descriptions-item label="补卡日期" :span="2">
             {{ formatDate(viewData.makeCard.date) }}
           </el-descriptions-item>
@@ -127,7 +133,7 @@
         </template>
 
         <!-- 外出信息 -->
-        <template v-if="viewData.type === 3 && viewData.goOut">
+        <template v-if="viewData.type === 4 && viewData.goOut">
           <el-descriptions-item label="时长">{{ viewData.goOut.duration }} 小时</el-descriptions-item>
           <el-descriptions-item label="外出原因" :span="2">{{ viewData.goOut.reason }}</el-descriptions-item>
           <el-descriptions-item label="开始时间" :span="2">
@@ -142,6 +148,25 @@
           {{ formatDate(viewData.createAt) }}
         </el-descriptions-item>
       </el-descriptions>
+
+      <!-- 审批流程 -->
+      <el-divider content-position="left">审批流程</el-divider>
+      <el-timeline>
+        <el-timeline-item
+          v-for="(approver, index) in viewData.approvers"
+          :key="index"
+          :type="getApproverStatusType(approver.status, index)"
+          :icon="getApproverIcon(approver.status, index)"
+          :timestamp="getApproverTimestamp(approver, index)"
+        >
+          <div>
+            <p><strong>{{ approver.userName }}</strong> {{ getApproverStatusLabel(approver.status, index) }}</p>
+            <p v-if="approver.reason" style="color: #909399; margin-top: 5px;">
+              审批意见：{{ approver.reason }}
+            </p>
+          </div>
+        </el-timeline-item>
+      </el-timeline>
     </el-dialog>
 
     <!-- 审批处理对话框 -->
@@ -178,10 +203,12 @@ const userStore = useUserStore()
 const loading = ref(false)
 const tableData = ref<Approval[]>([])
 const total = ref(0)
+const activeTab = ref('submit') // 默认显示"我提交的"
 
 const queryParams = reactive({
   userId: userStore.userInfo?.id,
-  type: undefined as number | undefined,
+  type: 1, // 1=我提交的, 2=待我审批
+  approvalType: undefined as number | undefined, // 审批类型筛选（请假/补卡/外出）
   page: 1,
   count: 10
 })
@@ -202,18 +229,57 @@ const formatDate = (timestamp?: number) => {
 }
 
 const getTypeText = (type?: number) => {
-  const texts: any = { 1: '请假', 2: '补卡', 3: '外出' }
+  // 后端类型: 1=通用, 2=请假, 3=补卡, 4=外出, 5=报销, 6=付款, 7=采购, 8=收款
+  const texts: any = { 1: '通用', 2: '请假', 3: '补卡', 4: '外出', 5: '报销', 6: '付款', 7: '采购', 8: '收款' }
   return texts[type || 0] || '未知'
 }
 
 const getStatusType = (status?: number) => {
-  const types: any = { 0: 'warning', 1: 'success', 2: 'danger', 3: 'info' }
+  // 后端状态: 0=未开始, 1=处理中, 2=通过, 3=拒绝, 4=撤销, 5=自动通过
+  const types: any = { 0: 'info', 1: 'warning', 2: 'success', 3: 'danger', 4: 'info', 5: 'success' }
   return types[status || 0] || 'info'
 }
 
 const getStatusText = (status?: number) => {
-  const texts: any = { 0: '待审批', 1: '已通过', 2: '已拒绝', 3: '已撤销' }
+  // 后端状态: 0=未开始, 1=处理中, 2=通过, 3=拒绝, 4=撤销, 5=自动通过
+  const texts: any = { 0: '未开始', 1: '处理中', 2: '已通过', 3: '已拒绝', 4: '已撤销', 5: '自动通过' }
   return texts[status || 0] || '未知'
+}
+
+const getLeaveTypeText = (type?: number) => {
+  // 1=事假, 2=调休, 3=病假, 4=年假, 5=产假, 6=陪产假, 7=婚假, 8=丧假, 9=哺乳假
+  const texts: any = { 1: '事假', 2: '调休', 3: '病假', 4: '年假', 5: '产假', 6: '陪产假', 7: '婚假', 8: '丧假', 9: '哺乳假' }
+  return texts[type || 0] || '未知'
+}
+
+const getApproverStatusType = (status?: number, index?: number) => {
+  // 根据审批人状态返回时间轴类型
+  // 0=未开始, 1=处理中, 2=通过, 3=拒绝
+  if (status === 2) return 'success' // 已通过
+  if (status === 3) return 'danger' // 已拒绝
+  if (status === 1) return 'primary' // 处理中
+  return 'info' // 未开始
+}
+
+const getApproverIcon = (status?: number, index?: number) => {
+  // 根据状态返回图标
+  if (status === 2) return 'CircleCheck'
+  if (status === 3) return 'CircleClose'
+  if (status === 1) return 'Clock'
+  return 'More'
+}
+
+const getApproverStatusLabel = (status?: number, index?: number) => {
+  // 根据审批人状态返回标签文本
+  if (status === 2) return '已审批通过'
+  if (status === 3) return '已拒绝'
+  if (status === 1) return '审批中...'
+  return '待审批'
+}
+
+const getApproverTimestamp = (approver: any, index: number) => {
+  // 返回审批时间戳（如果有的话）
+  return approver.approvedAt ? formatDate(approver.approvedAt) : ''
 }
 
 const loadData = async () => {
@@ -231,8 +297,15 @@ const loadData = async () => {
   }
 }
 
+const handleTabChange = (tab: string) => {
+  // 切换选项卡时，更新查询类型
+  queryParams.type = tab === 'submit' ? 1 : 2
+  queryParams.page = 1
+  loadData()
+}
+
 const handleReset = () => {
-  queryParams.type = undefined
+  queryParams.approvalType = undefined
   queryParams.page = 1
   loadData()
 }
@@ -250,7 +323,7 @@ const handleView = async (row: Approval) => {
 }
 
 const handleApprove = (row: Approval, status: number) => {
-  approveTitle.value = status === 1 ? '审批通过' : '审批拒绝'
+  approveTitle.value = status === 2 ? '审批通过' : '审批拒绝'
   approveForm.approvalId = row.id
   approveForm.status = status
   approveForm.reason = ''
@@ -258,7 +331,7 @@ const handleApprove = (row: Approval, status: number) => {
 }
 
 const handleConfirmApprove = async () => {
-  if (approveForm.status === 2 && !approveForm.reason) {
+  if (approveForm.status === 3 && !approveForm.reason) {
     ElMessage.warning('拒绝审批时必须填写理由')
     return
   }

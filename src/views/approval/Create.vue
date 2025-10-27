@@ -14,9 +14,9 @@
       >
         <el-form-item label="审批类型" prop="type">
           <el-radio-group v-model="form.type" @change="handleTypeChange">
-            <el-radio :label="1">请假</el-radio>
-            <el-radio :label="2">补卡</el-radio>
-            <el-radio :label="3">外出</el-radio>
+            <el-radio :label="2">请假</el-radio>
+            <el-radio :label="3">补卡</el-radio>
+            <el-radio :label="4">外出</el-radio>
           </el-radio-group>
         </el-form-item>
 
@@ -38,9 +38,19 @@
         </el-form-item>
 
         <!-- 请假表单 -->
-        <template v-if="form.type === 1">
+        <template v-if="form.type === 2">
           <el-form-item label="请假类型" prop="leave.type">
-            <el-input-number v-model="form.leave!.type" :min="1" />
+            <el-select v-model="form.leave!.type" placeholder="请选择请假类型" style="width: 100%;">
+              <el-option label="事假" :value="1" />
+              <el-option label="调休" :value="2" />
+              <el-option label="病假" :value="3" />
+              <el-option label="年假" :value="4" />
+              <el-option label="产假" :value="5" />
+              <el-option label="陪产假" :value="6" />
+              <el-option label="婚假" :value="7" />
+              <el-option label="丧假" :value="8" />
+              <el-option label="哺乳假" :value="9" />
+            </el-select>
           </el-form-item>
           <el-form-item label="开始时间" prop="leave.startTime">
             <el-date-picker
@@ -72,7 +82,7 @@
         </template>
 
         <!-- 补卡表单 -->
-        <template v-if="form.type === 2">
+        <template v-if="form.type === 3">
           <el-form-item label="补卡日期" prop="makeCard.date">
             <el-date-picker
               v-model="form.makeCard!.date"
@@ -91,7 +101,7 @@
         </template>
 
         <!-- 外出表单 -->
-        <template v-if="form.type === 3">
+        <template v-if="form.type === 4">
           <el-form-item label="开始时间" prop="goOut.startTime">
             <el-date-picker
               v-model="form.goOut!.startTime"
@@ -137,7 +147,7 @@ const userStore = useUserStore()
 const formRef = ref<FormInstance>()
 
 const form = reactive<Partial<Approval>>({
-  type: 1,
+  type: 2, // 默认请假类型
   title: '',
   abstract: '',
   reason: '',
@@ -205,17 +215,57 @@ const handleSubmit = async () => {
       try {
         const submitData: Partial<Approval> = {
           ...form,
-          finishAt: Date.now() / 1000
+          finishAt: Math.floor(Date.now() / 1000)
+        }
+
+        // 转换时间字段为数字类型
+        if (submitData.leave) {
+          submitData.leave = {
+            ...submitData.leave,
+            reason: form.reason, // 将原因字段复制到请假详情中
+            startTime: typeof submitData.leave.startTime === 'string'
+              ? parseInt(submitData.leave.startTime)
+              : submitData.leave.startTime,
+            endTime: typeof submitData.leave.endTime === 'string'
+              ? parseInt(submitData.leave.endTime)
+              : submitData.leave.endTime
+          }
+        }
+
+        if (submitData.goOut) {
+          submitData.goOut = {
+            ...submitData.goOut,
+            reason: form.reason, // 将原因字段复制到外出详情中
+            startTime: typeof submitData.goOut.startTime === 'string'
+              ? parseInt(submitData.goOut.startTime)
+              : submitData.goOut.startTime,
+            endTime: typeof submitData.goOut.endTime === 'string'
+              ? parseInt(submitData.goOut.endTime)
+              : submitData.goOut.endTime
+          }
+        }
+
+        if (submitData.makeCard) {
+          submitData.makeCard = {
+            ...submitData.makeCard,
+            reason: form.reason, // 将原因字段复制到补卡详情中
+            date: typeof submitData.makeCard.date === 'string'
+              ? parseInt(submitData.makeCard.date)
+              : submitData.makeCard.date
+          }
         }
 
         // 根据类型只保留对应的数据
-        if (form.type === 1) {
+        if (form.type === 2) {
+          // 请假：只保留 leave
           delete submitData.makeCard
           delete submitData.goOut
-        } else if (form.type === 2) {
+        } else if (form.type === 3) {
+          // 补卡：只保留 makeCard
           delete submitData.leave
           delete submitData.goOut
-        } else if (form.type === 3) {
+        } else if (form.type === 4) {
+          // 外出：只保留 goOut
           delete submitData.leave
           delete submitData.makeCard
         }
