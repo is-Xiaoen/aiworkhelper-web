@@ -165,6 +165,12 @@
         <el-descriptions-item label="标题">{{ viewData.title }}</el-descriptions-item>
         <el-descriptions-item label="描述">{{ viewData.desc }}</el-descriptions-item>
         <el-descriptions-item label="创建人">{{ viewData.creatorName }}</el-descriptions-item>
+        <el-descriptions-item label="执行人">
+          <span v-if="viewData.executeIds && viewData.executeIds.length > 0">
+            {{ getExecutorNames(viewData.executeIds) }}
+          </span>
+          <span v-else style="color: #999;">暂无执行人</span>
+        </el-descriptions-item>
         <el-descriptions-item label="截止时间">
           {{ formatDate(viewData.deadlineAt) }}
         </el-descriptions-item>
@@ -254,6 +260,15 @@ const getStatusType = (status: number) => {
 const getStatusText = (status: number) => {
   const texts: any = { 1: '待处理', 2: '进行中', 3: '已完成', 4: '已取消', 5: '已超时' }
   return texts[status] || '未知'
+}
+
+const getExecutorNames = (executeIds: string[]) => {
+  if (!executeIds || executeIds.length === 0) return '暂无执行人'
+  const names = executeIds.map(id => {
+    const user = userList.value.find(u => u.id === id)
+    return user ? user.name : id
+  })
+  return names.join('、')
 }
 
 const loadData = async () => {
