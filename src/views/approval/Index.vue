@@ -124,8 +124,11 @@
 
         <!-- 补卡信息 -->
         <template v-if="viewData.type === 3 && viewData.makeCard">
-          <el-descriptions-item label="补卡日期" :span="2">
+          <el-descriptions-item label="补卡日期">
             {{ formatDate(viewData.makeCard.date) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="打卡类型">
+            {{ getWorkCheckTypeText(viewData.makeCard.workCheckType) }}
           </el-descriptions-item>
           <el-descriptions-item label="补卡原因" :span="2">
             {{ viewData.makeCard.reason }}
@@ -249,6 +252,12 @@ const getStatusText = (status?: number) => {
 const getLeaveTypeText = (type?: number) => {
   // 1=事假, 2=调休, 3=病假, 4=年假, 5=产假, 6=陪产假, 7=婚假, 8=丧假, 9=哺乳假
   const texts: any = { 1: '事假', 2: '调休', 3: '病假', 4: '年假', 5: '产假', 6: '陪产假', 7: '婚假', 8: '丧假', 9: '哺乳假' }
+  return texts[type || 0] || '未知'
+}
+
+const getWorkCheckTypeText = (type?: number) => {
+  // 1=上班卡, 2=下班卡
+  const texts: any = { 1: '上班卡', 2: '下班卡' }
   return texts[type || 0] || '未知'
 }
 

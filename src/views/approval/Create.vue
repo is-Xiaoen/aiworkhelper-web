@@ -96,7 +96,10 @@
             <el-input v-model="form.makeCard!.reason" placeholder="请输入补卡原因" />
           </el-form-item>
           <el-form-item label="打卡类型" prop="makeCard.workCheckType">
-            <el-input-number v-model="form.makeCard!.workCheckType" :min="1" />
+            <el-select v-model="form.makeCard!.workCheckType" placeholder="请选择打卡类型" style="width: 100%;">
+              <el-option label="上班卡" :value="1" />
+              <el-option label="下班卡" :value="2" />
+            </el-select>
           </el-form-item>
         </template>
 
