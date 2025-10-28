@@ -137,8 +137,8 @@
 
         <!-- 外出信息 -->
         <template v-if="viewData.type === 4 && viewData.goOut">
-          <el-descriptions-item label="时长">{{ viewData.goOut.duration }} 小时</el-descriptions-item>
-          <el-descriptions-item label="外出原因" :span="2">{{ viewData.goOut.reason }}</el-descriptions-item>
+          <el-descriptions-item label="时长">{{ viewData.goOut.duration || 0 }} 小时</el-descriptions-item>
+          <el-descriptions-item label="外出原因">{{ viewData.goOut.reason || '-' }}</el-descriptions-item>
           <el-descriptions-item label="开始时间" :span="2">
             {{ formatDate(viewData.goOut.startTime) }}
           </el-descriptions-item>
