@@ -220,3 +220,23 @@ export interface UploadResponse {
   file: string
   filename: string
 }
+
+// 知识库相关类型
+export interface KnowledgeFile {
+  id: string
+  filename: string
+  filepath: string
+  uploadTime: number
+  size?: number
+  status?: number // 0=处理中，1=已完成
+}
+
+export interface KnowledgeChatRequest {
+  prompts: string
+  chatType: number // 5=知识库对话
+}
+
+export interface KnowledgeChatResponse {
+  chatType: number
+  data: string
+}

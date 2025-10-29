@@ -120,7 +120,8 @@ import {
   Document,
   OfficeBuilding,
   User,
-  ChatDotRound
+  ChatDotRound,
+  Reading
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { changePassword } from '@/api/user'

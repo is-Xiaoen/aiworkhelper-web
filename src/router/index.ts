@@ -59,6 +59,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Chat',
         component: () => import('@/views/chat/Index.vue'),
         meta: { title: '聊天', icon: 'ChatDotRound' }
+      },
+      {
+        path: '/knowledge',
+        name: 'Knowledge',
+        component: () => import('@/views/knowledge/Index.vue'),
+        meta: { title: '知识库', icon: 'Reading' }
       }
     ]
   }
