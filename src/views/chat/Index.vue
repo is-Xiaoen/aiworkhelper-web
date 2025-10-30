@@ -135,31 +135,6 @@
 
             <!-- 输入区域 -->
             <div class="message-input-area">
-              <div class="input-toolbar">
-                <el-upload
-                  :show-file-list="false"
-                  :before-upload="handleUploadImage"
-                  accept="image/*"
-                >
-                  <el-button circle size="small">
-                    <el-icon><Picture /></el-icon>
-                  </el-button>
-                </el-upload>
-
-                <el-select
-                  v-if="currentChatType === 'ai'"
-                  v-model="aiChatType"
-                  size="small"
-                  style="width: 150px; margin-left: 10px;"
-                >
-                  <el-option label="默认对话" :value="0" />
-                  <el-option label="待办查询" :value="1" />
-                  <el-option label="待办添加" :value="2" />
-                  <el-option label="审批查询" :value="3" />
-                  <el-option label="群消息总结" :value="4" />
-                </el-select>
-              </div>
-
               <div class="input-box" style="position: relative;">
                 <el-input
                   ref="inputRef"
