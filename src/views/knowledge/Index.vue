@@ -78,7 +78,7 @@
             </template>
             <div class="tips-content">
               <p>1. 上传文档后,通过AI对话更新知识库</p>
-              <p>2. ��新成功后,可询问文档相关内容</p>
+              <p>2. 更新成功后,可询问文档相关内容</p>
               <p>3. AI会基于上传的文档进行智能回答</p>
               <p>4. 支持员工手册、规章制度等文档</p>
             </div>
@@ -130,20 +130,13 @@
 
               <!-- 输入区域 -->
               <div class="message-input-area">
-                <div class="input-toolbar">
-                  <el-radio-group v-model="chatMode" size="small">
-                    <el-radio-button value="update">更新知识库</el-radio-button>
-                    <el-radio-button value="query">查询知识</el-radio-button>
-                  </el-radio-group>
-                </div>
-
                 <div class="input-box">
                   <el-input
                     ref="inputRef"
                     v-model="inputMessage"
                     type="textarea"
                     :rows="3"
-                    :placeholder="chatMode === 'update' ? '例如: 根据我上传的文件更新知识库' : '请输入您的问题...'"
+                    placeholder="例如: 根据我上传的文件更新知识库"
                     @keydown.enter.ctrl="handleSend"
                   />
                   <el-button
@@ -231,7 +224,7 @@ const handleUploadFile = async (file: File) => {
 
       // 自动添加提示消息
       messages.value.push({
-        content: `文件 "${file.name}" 已上传成功并记住文件路径,我将帮你更新知识库。\n\n文件路径: ${uploadedFile.filepath}`,
+        content: `文件 "${file.name}" 已上传成功,接下可以给我发送消息更新知识库。`,
         time: Date.now() / 1000,
         isSelf: false
       })
