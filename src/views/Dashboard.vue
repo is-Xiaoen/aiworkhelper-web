@@ -138,6 +138,7 @@ import { List, Document, User, OfficeBuilding, Plus, ChatDotRound } from '@eleme
 import { getTodoList } from '@/api/todo'
 import { getApprovalList } from '@/api/approval'
 import { getUserList } from '@/api/user'
+import { getDepSoa } from '@/api/department'
 import { useUserStore } from '@/stores/user'
 import dayjs from 'dayjs'
 import type { Todo, Approval } from '@/types'
@@ -159,23 +160,42 @@ const formatDate = (timestamp: number) => {
 }
 
 const getApprovalStatusType = (status: number) => {
+  // 后端状态: 0=未开始, 1=处理中, 2=通过, 3=拒绝, 4=撤销, 5=自动通过
   const types: any = {
-    0: 'warning',
-    1: 'success',
-    2: 'danger',
-    3: 'info'
+    0: 'info',
+    1: 'warning',
+    2: 'success',
+    3: 'danger',
+    4: 'info',
+    5: 'success'
   }
   return types[status] || 'info'
 }
 
 const getApprovalStatusText = (status: number) => {
+  // 后端状态: 0=未开始, 1=处理中, 2=通过, 3=拒绝, 4=撤销, 5=自动通过
   const texts: any = {
-    0: '待审批',
-    1: '已通过',
-    2: '已拒绝',
-    3: '已撤销'
+    0: '未开始',
+    1: '处理中',
+    2: '已通过',
+    3: '已拒绝',
+    4: '已撤销',
+    5: '自动通过'
   }
   return texts[status] || '未知'
+}
+
+// 递归统计部门数量
+const countDepartments = (departments: any[]): number => {
+  if (!departments || departments.length === 0) return 0
+
+  let count = departments.length
+  departments.forEach(dep => {
+    if (dep.child && Array.isArray(dep.child)) {
+      count += countDepartments(dep.child)
+    }
+  })
+  return count
 }
 
 const loadData = async () => {
@@ -206,6 +226,13 @@ const loadData = async () => {
     const userRes = await getUserList({ page: 1, count: 1 })
     if (userRes.code === 200) {
       stats.value.userCount = userRes.data.count
+    }
+
+    // 加载部门统计
+    const depRes = await getDepSoa()
+    if (depRes.code === 200) {
+      const departments = depRes.data?.child || []
+      stats.value.depCount = countDepartments(departments)
     }
   } catch (error) {
     console.error('加载数据失败:', error)

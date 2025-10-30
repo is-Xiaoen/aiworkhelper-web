@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-header">
-        <h2>AI工作助手</h2>
+        <h2>AI智能办公系统</h2>
         <p>智能办公，高效协作</p>
       </div>
 
