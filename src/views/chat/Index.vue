@@ -951,11 +951,141 @@ const sendAIMessage = async () => {
     })
 
     if (res.code === 200) {
+      // 格式化AI回复内容
+      let content = ''
+      let rawData = res.data.data
+
+      console.log('[AI回复] 原始数据类型:', typeof rawData)
+      console.log('[AI回复] 原始数据 (完整):', rawData)
+      console.log('[AI回复] 原始数据长度:', typeof rawData === 'string' ? rawData.length : 'N/A')
+
+      // 如果是字符串，尝试提取其中的JSON
+      if (typeof rawData === 'string') {
+        // 检查是否包含```json代码块（支持```json或```格式）
+        const jsonBlockMatch = rawData.match(/```json\s*\n([\s\S]*?)\n```/) ||
+                               rawData.match(/```\s*\n([\s\S]*?)\n```/) ||
+                               rawData.match(/```json\s*([\s\S]*?)```/) ||
+                               rawData.match(/```([\s\S]*?)```/)
+
+        if (jsonBlockMatch) {
+          try {
+            console.log('[AI回复] 检测到JSON代码块，提取内容')
+            const jsonStr = jsonBlockMatch[1].trim()
+            rawData = JSON.parse(jsonStr)
+            console.log('[AI回复] 成功解析JSON:', rawData)
+          } catch (e) {
+            console.error('[AI回复] JSON解析失败:', e)
+            // 尝试直接解析整个字符串
+            try {
+              rawData = JSON.parse(rawData)
+              console.log('[AI回复] 直接解析原始字符串成功')
+            } catch (e2) {
+              content = rawData
+            }
+          }
+        } else {
+          // 没有代码块，尝试直接解析为JSON
+          try {
+            const parsed = JSON.parse(rawData)
+            rawData = parsed
+            console.log('[AI回复] 直接解析字符串为JSON成功')
+          } catch (e) {
+            // 解析失败，作为普通文本处理
+            content = rawData
+          }
+        }
+      }
+
+      // 如果成功解析出对象，进行格式化
+      if (content === '' && typeof rawData === 'object' && rawData !== null) {
+        // 检查是否是标准的AI响应格式 {chatType: 1, data: {...}}
+        if (rawData.chatType !== undefined && rawData.data) {
+          console.log('[AI回复] 检测到标准AI响应格式, chatType:', rawData.chatType)
+
+          // chatType=1 表示待办查询
+          if (rawData.chatType === 1 && rawData.data.count !== undefined && Array.isArray(rawData.data.data)) {
+            const todos = rawData.data.data
+            const count = rawData.data.count
+            console.log('[AI回复] 待办查询结果，数量:', count)
+
+            if (todos.length === 0) {
+              content = '📋 暂无待办事项'
+            } else {
+              content = `📋 找到 ${count} 个待办事项:\n\n` +
+                todos.map((todo: any, index: number) => {
+                  const deadline = new Date(todo.deadlineAt * 1000).toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+                  const statusText = todo.status === 0 ? '📌 未发布' : todo.status === 1 ? '⏳ 进行中' : '✅ 已完成'
+                  return `${index + 1}. 【${todo.title}】\n` +
+                         `   👤 创建人: ${todo.creatorName}\n` +
+                         `   ⏰ 截止: ${deadline}\n` +
+                         `   ${statusText}\n` +
+                         `   📝 描述: ${todo.desc || '无'}`
+                }).join('\n\n')
+            }
+          } else {
+            // 其他chatType类型，使用通用格式化
+            content = JSON.stringify(rawData.data, null, 2)
+          }
+        }
+        // 检查是否是嵌套结构的待办查询结果（兼容旧格式）
+        else if (rawData.data && rawData.data.count !== undefined && Array.isArray(rawData.data.data)) {
+          const todos = rawData.data.data
+          const count = rawData.data.count
+          console.log('[AI回复] 检测到嵌套待办结果，数量:', count)
+          if (todos.length === 0) {
+            content = '📋 暂无待办事项'
+          } else {
+            content = `📋 找到 ${count} 个待办事项:\n\n` +
+              todos.map((todo: any, index: number) => {
+                const deadline = new Date(todo.deadlineAt * 1000).toLocaleString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })
+                const statusText = todo.status === 0 ? '📌 未发布' : todo.status === 1 ? '⏳ 进行中' : '✅ 已完成'
+                return `${index + 1}. 【${todo.title}】\n` +
+                       `   👤 创建人: ${todo.creatorName}\n` +
+                       `   ⏰ 截止: ${deadline}\n` +
+                       `   ${statusText}\n` +
+                       `   📝 描述: ${todo.desc || '无'}`
+              }).join('\n\n')
+          }
+        } else if (Array.isArray(rawData)) {
+          // 直接是数组的情况
+          const todos = rawData
+          console.log('[AI回复] 检测到数组格式，数量:', todos.length)
+          if (todos.length === 0) {
+            content = '暂无待办事项'
+          } else {
+            content = `找到 ${todos.length} 个待办事项:\n\n` +
+              todos.map((todo: any, index: number) => {
+                const deadline = new Date(todo.deadlineAt * 1000).toLocaleString('zh-CN')
+                const statusText = todo.status === 0 ? '未发布' : todo.status === 1 ? '进行中' : '已完成'
+                return `${index + 1}. ${todo.title}\n   创建人: ${todo.creatorName}\n   截止时间: ${deadline}\n   状态: ${statusText}\n   描述: ${todo.desc || '无'}`
+              }).join('\n\n')
+          }
+        } else {
+          // 其他对象类型,使用JSON格式
+          console.log('[AI回复] 其他对象类型，使用JSON格式')
+          content = JSON.stringify(rawData, null, 2)
+        }
+      }
+
+      console.log('[AI回复] 最终格式化内容:', content.substring(0, 100))
+
       // 添加AI回复
       messages.value.push({
         sendId: 'ai',
         senderName: 'AI助手',
-        content: typeof res.data.data === 'string' ? res.data.data : JSON.stringify(res.data.data, null, 2),
+        content,
         contentType: 1,
         time: Date.now() / 1000,
         isSelf: false
