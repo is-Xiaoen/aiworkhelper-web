@@ -88,7 +88,7 @@
 
       <!-- 右侧聊天区域 -->
       <el-col :xs="24" :sm="16" :md="18" style="height: 100%;">
-        <el-card class="chat-main" body-style="padding: 0; height: 100%;">
+        <el-card class="chat-main">
           <template #header>
             <div class="chat-header">
               <span>{{ currentConversationName }}</span>
@@ -999,16 +999,16 @@ const sendAIMessage = async () => {
       // 如果成功解析出对象，进行格式化
       if (content === '' && typeof rawData === 'object' && rawData !== null) {
         // 检查是否是标准的AI响应格式 {chatType: 1, data: {...}}
-        if (rawData.chatType !== undefined && rawData.data) {
+        if (rawData.chatType !== undefined && rawData.data !== undefined) {
           console.log('[AI回复] 检测到标准AI响应格式, chatType:', rawData.chatType)
 
           // chatType=1 表示待办查询
-          if (rawData.chatType === 1 && rawData.data.count !== undefined && Array.isArray(rawData.data.data)) {
-            const todos = rawData.data.data
+          if (rawData.chatType === 1 && rawData.data !== null && rawData.data.count !== undefined) {
+            const todos = rawData.data.data || []
             const count = rawData.data.count
             console.log('[AI回复] 待办查询结果，数量:', count)
 
-            if (todos.length === 0) {
+            if (count === 0 || todos.length === 0) {
               content = '📋 暂无待办事项'
             } else {
               content = `📋 找到 ${count} 个待办事项:\n\n` +
@@ -1026,6 +1026,53 @@ const sendAIMessage = async () => {
                          `   ⏰ 截止: ${deadline}\n` +
                          `   ${statusText}\n` +
                          `   📝 描述: ${todo.desc || '无'}`
+                }).join('\n\n')
+            }
+          }
+          // chatType=3 表示审批查询
+          else if (rawData.chatType === 3 && rawData.data !== null && rawData.data.count !== undefined) {
+            const approvals = rawData.data.data || []
+            const count = rawData.data.count
+            console.log('[AI回复] 审批查询结果，数量:', count)
+
+            if (count === 0 || approvals.length === 0) {
+              content = '📝 暂无审批单'
+            } else {
+              // 审批类型映射（与后端保持一致: 1=通用, 2=请假, 3=补卡, 4=外出, 5=报销, 6=付款, 7=采购, 8=收款）
+              const typeMap: Record<number, string> = {
+                1: '通用', 2: '请假', 3: '补卡', 4: '外出',
+                5: '报销', 6: '付款', 7: '采购', 8: '收款'
+              }
+              // 审批状态映射
+              const statusMap: Record<number, string> = {
+                0: '⏸️ 未开始', 1: '⏳ 进行中',
+                2: '✅ 已通过', 3: '🔙 已撤销', 4: '❌ 已拒绝'
+              }
+
+              content = `📝 找到 ${count} 个审批单:\n\n` +
+                approvals.map((approval: any, index: number) => {
+                  const createTime = approval.createAt
+                    ? new Date(approval.createAt * 1000).toLocaleString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    : '无'
+                  const typeText = typeMap[approval.type] || '未知'
+                  const statusText = statusMap[approval.status] || '未知'
+
+                  // 通过createId查找创建人名称
+                  const creator = userList.value.find(u => u.id === approval.createId)
+                  const creatorName = creator?.name || approval.creatorId || '未知'
+
+                  return `${index + 1}. 【${approval.title || '无标题'}】\n` +
+                         `   📂 类型: ${typeText}\n` +
+                         `   👤 创建人: ${creatorName}\n` +
+                         `   🕐 创建时间: ${createTime}\n` +
+                         `   ${statusText}\n` +
+                         `   📄 详情: ${approval.abstract || '无'}`
                 }).join('\n\n')
             }
           } else {
@@ -1590,6 +1637,14 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
+.chat-main :deep(.el-card__body) {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .sidebar-header {
   display: flex;
   justify-content: space-between;
@@ -1680,7 +1735,8 @@ onBeforeUnmount(() => {
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .message-list {
@@ -1688,6 +1744,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   padding: 20px;
   background-color: #f5f7fa;
+  min-height: 0;
 }
 
 .message-item {
