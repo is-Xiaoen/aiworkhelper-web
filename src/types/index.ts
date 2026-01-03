@@ -221,7 +221,7 @@ export interface UploadResponse {
   filename: string
 }
 
-// 知识库相关类型
+// 知识库相关类型（旧版 - AI 对话模式）
 export interface KnowledgeFile {
   id: string
   filename: string
@@ -239,4 +239,163 @@ export interface KnowledgeChatRequest {
 export interface KnowledgeChatResponse {
   chatType: number
   data: string
+}
+
+// ========== 知识库管理相关类型（新版 - 文件管理模式）==========
+
+/** 知识库文件上传响应 */
+export interface KnowledgeUploadResp {
+  id: string           // 文档 ID
+  filename: string     // 原始文件名
+  title: string        // 文档标题
+  contentType: string  // 内容类型
+  fileSize: number     // 文件大小（字节）
+}
+
+/** 知识库文件列表请求参数 */
+export interface KnowledgeListParams {
+  page?: number   // 页码（从1开始）
+  count?: number  // 每页数量
+}
+
+/** 知识库索引状态 */
+export interface KnowledgeIndexStatus {
+  meilisearch: 'pending' | 'synced' | 'failed'  // Meilisearch 状态
+  graphrag: 'pending' | 'synced' | 'failed'     // GraphRAG 状态
+  lastSyncAt: number   // 最后同步时间戳
+  errorMsg: string     // 错误信息
+}
+
+/** 知识库文件视图对象 */
+export interface KnowledgeFileVO {
+  id: string            // 文档 ID
+  title: string         // 文档标题
+  filename: string      // 原始文件名
+  contentType: string   // 内容类型
+  fileSize: number      // 文件大小
+  chunkCount: number    // 分块数量
+  indexStatus: KnowledgeIndexStatus  // 各索引器状态
+  createAt: number      // 创建时间
+  updateAt: number      // 更新时间
+}
+
+/** 知识库文件列表响应 */
+export interface KnowledgeListResp {
+  total: number           // 总记录数
+  list: KnowledgeFileVO[] // 文件列表
+}
+
+/** 知识库重新索引响应 */
+export interface KnowledgeReindexResp {
+  id: string                    // 文档 ID
+  success: boolean              // 是否成功
+  chunkCount: number            // 分块数量
+  adapters: Record<string, boolean>  // 各适配器结果
+  errors: Record<string, string>     // 各适配器错误信息
+}
+
+/** 适配器健康状态 */
+export interface AdapterHealthVO {
+  name: string        // 适配器名称
+  healthy: boolean    // 是否健康
+  latency: number     // 响应延迟（毫秒）
+  message: string     // 状态消息
+}
+
+/** 知识库健康检查响应 */
+export interface KnowledgeHealthResp {
+  healthy: boolean                        // 整体是否健康
+  adapters: Record<string, AdapterHealthVO>  // 各适配器状态
+}
+
+// ========== 会议相关类型 ==========
+
+/** 会议文件上传响应 */
+export interface MeetingUploadResp {
+  fileId: string      // 文件唯一标识
+  filename: string    // 原始文件名
+  contentLen: number  // 内容长度（字符数）
+  preview: string     // 内容预览（前500字符）
+  contentType: string // 文件类型
+}
+
+/** 会议纪要生成请求 */
+export interface MeetingSummaryReq {
+  content?: string  // 会议内容（直接提供文本）
+  fileId?: string   // 文件ID（引用之前上传的文件）
+}
+
+/** 会议纪要响应 */
+export interface MeetingSummaryResp {
+  title: string       // 会议主题
+  date: string        // 会议日期
+  duration: string    // 会议时长
+  attendees: string[] // 参会人员
+  keyPoints: string[] // 讨论要点
+  decisions: string[] // 决议事项
+  actionItems: string[] // 待办事项（简要）
+  summary: string     // 会议总结
+  markdown: string    // Markdown 格式完整纪要
+}
+
+/** 会议待办提取请求 */
+export interface MeetingTodosReq {
+  content?: string  // 会议内容（直接提供文本）
+  fileId?: string   // 文件ID（引用之前上传的文件）
+}
+
+/** 单个会议待办项 */
+export interface MeetingTodoItem {
+  title: string       // 任务标题
+  description: string // 任务描述
+  assignee: string    // 责任人
+  deadline: string    // 截止时间
+  priority: 'high' | 'medium' | 'low' // 优先级
+  context: string     // 任务背景
+}
+
+/** 会议待办提取响应 */
+export interface MeetingTodosResp {
+  meetingTitle: string        // 来源会议
+  todoCount: number           // 待办数量
+  todoItems: MeetingTodoItem[] // 待办事项列表
+  notes: string               // 备注
+  markdown: string            // Markdown 格式输出
+}
+
+/** 会议记录（前端扩展，用于列表展示） */
+export interface MeetingRecord {
+  fileId: string
+  filename: string
+  contentLen: number
+  preview: string
+  contentType: string
+  uploadTime: number
+  status: MeetingStatus
+  summary?: MeetingSummaryResp
+  todos?: MeetingTodosResp
+}
+
+/** 会议处理状态 */
+export type MeetingStatus = 'uploaded' | 'processing' | 'completed' | 'failed'
+
+// ========== Multi-Agent 响应类型 ==========
+
+/** Multi-Agent 响应格式 */
+export interface MultiAgentResponse {
+  agentType?: 'supervisor' | 'todo' | 'knowledge' | 'meeting' | 'approval'
+  traceId?: string
+  chatType?: number  // 兼容旧版格式
+  data: unknown
+  metadata?: {
+    duration_ms: number
+    tools_used: string[]
+  }
+}
+
+/** 解析后的 AI 响应 */
+export interface ParsedAIResponse {
+  type: 'text' | 'meeting_summary' | 'meeting_todos' | 'todo_list' | 'approval_list' | 'knowledge' | 'json'
+  content: string
+  structured?: unknown
 }

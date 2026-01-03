@@ -1,354 +1,474 @@
 <template>
   <div class="knowledge-page">
-    <el-card class="knowledge-container">
-      <template #header>
-        <div class="knowledge-header">
-          <span>知识库</span>
-          <el-tag type="info" size="small">AI智能问答</el-tag>
+    <!-- 页面头部 -->
+    <el-card class="header-card">
+      <div class="page-header">
+        <div class="header-left">
+          <h2>知识库管理</h2>
+          <el-tag type="info" size="small">文档索引中心</el-tag>
         </div>
-      </template>
-
-      <div class="knowledge-content">
-        <!-- 左侧：文件上传区域 -->
-        <div class="upload-section">
-          <el-card shadow="hover">
-            <template #header>
-              <div class="section-title">
-                <el-icon><Upload /></el-icon>
-                <span>上传文档</span>
-              </div>
-            </template>
-
-            <el-upload
-              class="upload-dragger"
-              drag
-              :before-upload="handleUploadFile"
-              :show-file-list="false"
-              accept=".pdf,.doc,.docx,.txt"
-            >
-              <el-icon class="upload-icon"><UploadFilled /></el-icon>
-              <div class="upload-text">
-                拖拽文件到此处或
-                <em>点击上传</em>
-              </div>
-              <div class="upload-tip">
-                支持 PDF、Word、TXT 格式文件
-              </div>
-            </el-upload>
-
-            <div v-if="uploadedFiles.length > 0" class="file-list">
-              <div class="file-list-header">
-                <span>已上传文件</span>
-                <el-tag size="small">{{ uploadedFiles.length }}</el-tag>
-              </div>
-              <div
-                v-for="file in uploadedFiles"
-                :key="file.id"
-                class="file-item"
-              >
-                <el-icon><Document /></el-icon>
-                <div class="file-info">
-                  <div class="file-name">{{ file.filename }}</div>
-                  <div class="file-time">{{ formatTime(file.uploadTime) }}</div>
-                </div>
-                <el-tag
-                  v-if="file.status === 0"
-                  type="warning"
-                  size="small"
-                >
-                  处理中
-                </el-tag>
-                <el-tag
-                  v-else-if="file.status === 1"
-                  type="success"
-                  size="small"
-                >
-                  已完成
-                </el-tag>
-              </div>
-            </div>
-          </el-card>
-
-          <el-card shadow="hover" class="tips-card">
-            <template #header>
-              <div class="section-title">
-                <el-icon><InfoFilled /></el-icon>
-                <span>使用说明</span>
-              </div>
-            </template>
-            <div class="tips-content">
-              <p>1. 上传文档后,通过AI对话更新知识库</p>
-              <p>2. 更新成功后,可询问文档相关内容</p>
-              <p>3. AI会基于上传的文档进行智能回答</p>
-              <p>4. 支持员工手册、规章制度等文档</p>
-            </div>
-          </el-card>
-        </div>
-
-        <!-- 右侧:AI 对话区域 -->
-        <div class="chat-section">
-          <el-card class="chat-card" body-style="padding: 0; height: 100%;">
-            <template #header>
-              <div class="chat-header">
-                <span>AI 知识库助手</span>
-                <el-tag type="success" size="small">在线</el-tag>
-              </div>
-            </template>
-
-            <div class="chat-container">
-              <!-- 消息列表 -->
-              <div ref="messageListRef" class="message-list">
-                <div
-                  v-for="(msg, index) in messages"
-                  :key="index"
-                  :class="['message-item', msg.isSelf ? 'self' : 'other']"
-                >
-                  <el-avatar :size="36">
-                    {{ msg.isSelf ? userStore.userInfo?.name?.[0] : 'AI' }}
-                  </el-avatar>
-                  <div class="message-content">
-                    <div class="message-meta">
-                      <span class="sender-name">{{ msg.isSelf ? '我' : 'AI助手' }}</span>
-                      <span class="message-time">{{ formatMessageTime(msg.time) }}</span>
-                    </div>
-                    <div class="message-bubble">
-                      <div class="text-message">{{ msg.content }}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-if="aiLoading" class="message-item other">
-                  <el-avatar :size="36">AI</el-avatar>
-                  <div class="message-content">
-                    <div class="message-bubble">
-                      <el-icon class="is-loading"><Loading /></el-icon>
-                      AI正在思考中...
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 输入区域 -->
-              <div class="message-input-area">
-                <div class="input-box">
-                  <el-input
-                    ref="inputRef"
-                    v-model="inputMessage"
-                    type="textarea"
-                    :rows="3"
-                    placeholder="例如: 根据我上传的文件更新知识库"
-                    @keydown.enter.ctrl="handleSend"
-                  />
-                  <el-button
-                    type="primary"
-                    :loading="sending"
-                    @click="handleSend"
-                  >
-                    发送 (Ctrl+Enter)
-                  </el-button>
-                </div>
-              </div>
-            </div>
-          </el-card>
+        <div class="header-right">
+          <!-- 健康状态 -->
+          <div class="health-status" v-if="healthData">
+            <el-tooltip :content="healthTooltip" placement="bottom">
+              <el-tag :type="healthData.healthy ? 'success' : 'danger'" effect="plain">
+                <el-icon><component :is="healthData.healthy ? 'CircleCheck' : 'Warning'" /></el-icon>
+                {{ healthData.healthy ? '系统正常' : '部分异常' }}
+              </el-tag>
+            </el-tooltip>
+          </div>
+          <el-button type="primary" @click="showUploadDialog = true">
+            <el-icon><Upload /></el-icon>
+            上传文档
+          </el-button>
         </div>
       </div>
     </el-card>
+
+    <!-- 文件列表 -->
+    <el-card class="list-card">
+      <el-table
+        :data="fileList"
+        v-loading="loading"
+        stripe
+        style="width: 100%"
+      >
+        <el-table-column prop="title" label="文档标题" min-width="200">
+          <template #default="{ row }">
+            <div class="file-title">
+              <el-icon class="file-icon"><Document /></el-icon>
+              <span>{{ row.title || row.filename }}</span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="contentType" label="类型" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" type="info">{{ getFileType(row.contentType) }}</el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="fileSize" label="大小" width="100">
+          <template #default="{ row }">
+            {{ formatFileSize(row.fileSize) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="chunkCount" label="分块数" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag size="small">{{ row.chunkCount }}</el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="索引状态" width="220">
+          <template #default="{ row }">
+            <div class="index-status">
+              <el-tooltip content="Meilisearch 全文检索" placement="top">
+                <el-tag
+                  :type="getStatusType(row.indexStatus?.meilisearch)"
+                  size="small"
+                  class="status-tag"
+                >
+                  <el-icon><Search /></el-icon>
+                  {{ getStatusText(row.indexStatus?.meilisearch) }}
+                </el-tag>
+              </el-tooltip>
+              <el-tooltip content="GraphRAG 知识图谱" placement="top">
+                <el-tag
+                  :type="getStatusType(row.indexStatus?.graphrag)"
+                  size="small"
+                  class="status-tag"
+                >
+                  <el-icon><Share /></el-icon>
+                  {{ getStatusText(row.indexStatus?.graphrag) }}
+                </el-tag>
+              </el-tooltip>
+            </div>
+            <div v-if="row.indexStatus?.errorMsg" class="error-msg">
+              <el-tooltip :content="row.indexStatus.errorMsg" placement="top">
+                <span class="error-text">{{ row.indexStatus.errorMsg }}</span>
+              </el-tooltip>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="createAt" label="上传时间" width="170">
+          <template #default="{ row }">
+            {{ formatTime(row.createAt) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="hasIndexError(row)"
+              size="small"
+              type="warning"
+              :loading="reindexingIds.has(row.id)"
+              @click="handleReindex(row)"
+            >
+              重新索引
+            </el-button>
+            <el-popconfirm
+              title="确定要删除这个文档吗？"
+              confirm-button-text="删除"
+              cancel-button-text="取消"
+              @confirm="handleDelete(row)"
+            >
+              <template #reference>
+                <el-button size="small" type="danger" :loading="deletingIds.has(row.id)">
+                  删除
+                </el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-wrapper" v-if="total > 0">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next"
+          @size-change="loadFileList"
+          @current-change="loadFileList"
+        />
+      </div>
+
+      <!-- 空状态 -->
+      <el-empty v-if="!loading && fileList.length === 0" description="暂无文档，请上传">
+        <el-button type="primary" @click="showUploadDialog = true">
+          <el-icon><Upload /></el-icon>
+          上传文档
+        </el-button>
+      </el-empty>
+    </el-card>
+
+    <!-- 上传对话框 -->
+    <el-dialog
+      v-model="showUploadDialog"
+      title="上传知识库文档"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <el-upload
+        class="upload-dragger"
+        drag
+        :before-upload="handleUpload"
+        :show-file-list="false"
+        accept=".txt,.md,.pdf"
+        :disabled="uploading"
+      >
+        <div v-if="uploading" class="uploading-state">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          <div class="upload-text">正在上传并索引...</div>
+        </div>
+        <div v-else>
+          <el-icon class="upload-icon"><UploadFilled /></el-icon>
+          <div class="upload-text">
+            拖拽文件到此处或 <em>点击上传</em>
+          </div>
+          <div class="upload-tip">
+            支持 .txt, .md, .pdf 格式文件
+          </div>
+        </div>
+      </el-upload>
+
+      <template #footer>
+        <el-button @click="showUploadDialog = false" :disabled="uploading">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Upload,
   UploadFilled,
   Document,
-  InfoFilled,
-  Loading
+  Search,
+  Share,
+  Loading,
+  CircleCheck,
+  Warning
 } from '@element-plus/icons-vue'
-import { uploadKnowledgeFile, knowledgeChat } from '@/api/knowledge'
-import { useUserStore } from '@/stores/user'
+import {
+  uploadKnowledge,
+  getKnowledgeList,
+  deleteKnowledge,
+  reindexKnowledge,
+  getKnowledgeHealth
+} from '@/api/knowledge'
+import type { KnowledgeFileVO, KnowledgeHealthResp } from '@/types'
 import dayjs from 'dayjs'
-import type { KnowledgeFile } from '@/types'
 
-const userStore = useUserStore()
+// 状态
+const loading = ref(false)
+const uploading = ref(false)
+const showUploadDialog = ref(false)
+const fileList = ref<KnowledgeFileVO[]>([])
+const total = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const reindexingIds = ref<Set<string>>(new Set())
+const deletingIds = ref<Set<string>>(new Set())
+const healthData = ref<KnowledgeHealthResp | null>(null)
 
-interface Message {
-  content: string
-  time: number
-  isSelf: boolean
-}
+// 健康状态提示
+const healthTooltip = computed(() => {
+  if (!healthData.value) return '加载中...'
+  const adapters = healthData.value.adapters
+  const lines = Object.entries(adapters).map(([name, status]) => {
+    const icon = status.healthy ? '✓' : '✗'
+    return `${icon} ${status.name}: ${status.message} (${status.latency}ms)`
+  })
+  return lines.join('\n')
+})
 
-const messageListRef = ref<HTMLElement>()
-const inputRef = ref()
-const messages = ref<Message[]>([
-  {
-    content: '你好!我是知识库AI助手。你可以上传文档并让我帮你更新知识库,或者直接向我询问已有知识库中的内容。',
-    time: Date.now() / 1000,
-    isSelf: false
+// 加载文件列表
+const loadFileList = async () => {
+  loading.value = true
+  try {
+    const res = await getKnowledgeList({
+      page: currentPage.value,
+      count: pageSize.value
+    })
+    if (res.code === 200) {
+      fileList.value = res.data.list || []
+      total.value = res.data.total
+    } else {
+      ElMessage.error(res.msg || '加载失败')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || '加载失败')
+  } finally {
+    loading.value = false
   }
-])
-const inputMessage = ref('')
-const sending = ref(false)
-const aiLoading = ref(false)
-const chatMode = ref<'update' | 'query'>('update') // update=更新知识库, query=查询知识
-const uploadedFiles = ref<KnowledgeFile[]>([])
-
-// 格式化时间
-const formatTime = (timestamp: number) => {
-  return dayjs(timestamp).format('YYYY-MM-DD HH:mm:ss')
 }
 
-// 格式化消息时间
-const formatMessageTime = (timestamp: number) => {
-  return dayjs.unix(timestamp).format('HH:mm:ss')
+// 加载健康状态
+const loadHealth = async () => {
+  try {
+    const res = await getKnowledgeHealth()
+    if (res.code === 200) {
+      healthData.value = res.data
+    }
+  } catch {
+    // 静默处理
+  }
 }
 
 // 上传文件
-const handleUploadFile = async (file: File) => {
+const handleUpload = async (file: File) => {
+  uploading.value = true
   try {
-    ElMessage.info('正在上传文件...')
-    const res = await uploadKnowledgeFile(file)
-
+    const res = await uploadKnowledge(file)
     if (res.code === 200) {
-      const uploadedFile: KnowledgeFile = {
-        id: Date.now().toString(),
-        filename: res.data.filename,
-        filepath: res.data.file, // 使用相对路径,后端会自动转换为绝对路径
-        uploadTime: Date.now(),
-        status: 0 // 处理中
-      }
-      uploadedFiles.value.unshift(uploadedFile)
-
-      ElMessage.success('文件上传成功!')
-
-      // 自动添加提示消息
-      messages.value.push({
-        content: `文件 "${file.name}" 已上传成功,接下可以给我发送消息更新知识库。`,
-        time: Date.now() / 1000,
-        isSelf: false
-      })
-
-      // 自动填充更新命令 - 使用简单命令,后端通过记忆机制自动找到文件
-      inputMessage.value = `根据我上传的文件更新知识库`
-      chatMode.value = 'update'
-
-      scrollToBottom()
-    }
-  } catch (error) {
-    ElMessage.error('文件上传失败')
-  }
-
-  return false
-}
-
-// 发送消息
-const handleSend = async () => {
-  if (!inputMessage.value.trim()) return
-
-  const content = inputMessage.value.trim()
-
-  // 添加用户消息
-  messages.value.push({
-    content,
-    time: Date.now() / 1000,
-    isSelf: true
-  })
-
-  inputMessage.value = ''
-  scrollToBottom()
-
-  // 根据模式调用不同的AI功能
-  aiLoading.value = true
-  sending.value = true
-
-  try {
-    // chatType: 0 默认对话模式,后端会通过智能路由自动识别
-    // 根据消息内容自动路由到 knowledge_update 或 knowledge_retrieval_qa
-    const res = await knowledgeChat({
-      prompts: content,
-      chatType: 0
-    })
-
-    if (res.code === 200) {
-      // 如果是更新知识库成功,更新文件状态
-      if (chatMode.value === 'update' && res.data.data?.includes('成功')) {
-        const updatingFiles = uploadedFiles.value.filter(f => f.status === 0)
-        updatingFiles.forEach(f => {
-          f.status = 1
-        })
-      }
-
-      // 添加 AI 回复
-      messages.value.push({
-        content: typeof res.data.data === 'string' ? res.data.data : JSON.stringify(res.data.data, null, 2),
-        time: Date.now() / 1000,
-        isSelf: false
-      })
-
-      scrollToBottom()
+      ElMessage.success(`文档 "${res.data.filename}" 上传成功`)
+      showUploadDialog.value = false
+      await loadFileList()
+    } else {
+      ElMessage.error(res.msg || '上传失败')
     }
   } catch (error: any) {
-    ElMessage.error(error?.message || 'AI请求失败')
-
-    // 添加错误提示消息
-    messages.value.push({
-      content: '抱歉,请求失败了。请稍后重试。',
-      time: Date.now() / 1000,
-      isSelf: false
-    })
+    ElMessage.error(error?.message || '上传失败')
   } finally {
-    aiLoading.value = false
-    sending.value = false
+    uploading.value = false
+  }
+  return false // 阻止默认上传行为
+}
+
+// 删除文件
+const handleDelete = async (row: KnowledgeFileVO) => {
+  deletingIds.value.add(row.id)
+  try {
+    const res = await deleteKnowledge(row.id)
+    if (res.code === 200) {
+      ElMessage.success('删除成功')
+      await loadFileList()
+    } else {
+      ElMessage.error(res.msg || '删除失败')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || '删除失败')
+  } finally {
+    deletingIds.value.delete(row.id)
   }
 }
 
-// 滚动到底部
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (messageListRef.value) {
-      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+// 重新索引
+const handleReindex = async (row: KnowledgeFileVO) => {
+  reindexingIds.value.add(row.id)
+  try {
+    const res = await reindexKnowledge(row.id)
+    if (res.code === 200 && res.data.success) {
+      ElMessage.success('重新索引成功')
+      await loadFileList()
+    } else {
+      const errors = res.data.errors
+      const errorMsg = Object.values(errors || {}).join('; ')
+      ElMessage.error(errorMsg || res.msg || '索引失败')
     }
-  })
+  } catch (error: any) {
+    ElMessage.error(error?.message || '索引失败')
+  } finally {
+    reindexingIds.value.delete(row.id)
+  }
 }
+
+// 判断是否有索引错误
+const hasIndexError = (row: KnowledgeFileVO) => {
+  const status = row.indexStatus
+  return status?.meilisearch === 'failed' || status?.graphrag === 'failed'
+}
+
+// 格式化时间
+const formatTime = (timestamp: number) => {
+  if (!timestamp) return '-'
+  return dayjs(timestamp).format('YYYY-MM-DD HH:mm')
+}
+
+// 格式化文件大小
+const formatFileSize = (bytes: number) => {
+  if (!bytes) return '-'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+// 获取文件类型显示名
+const getFileType = (contentType: string) => {
+  const typeMap: Record<string, string> = {
+    'text/plain': 'TXT',
+    'text/markdown': 'MD',
+    'application/pdf': 'PDF'
+  }
+  return typeMap[contentType] || contentType || '-'
+}
+
+// 获取状态标签类型
+const getStatusType = (status: string | undefined) => {
+  switch (status) {
+    case 'synced':
+      return 'success'
+    case 'pending':
+      return 'warning'
+    case 'failed':
+      return 'danger'
+    default:
+      return 'info'
+  }
+}
+
+// 获取状态文本
+const getStatusText = (status: string | undefined) => {
+  switch (status) {
+    case 'synced':
+      return '已同步'
+    case 'pending':
+      return '待同步'
+    case 'failed':
+      return '失败'
+    default:
+      return '未知'
+  }
+}
+
+// 初始化
+onMounted(() => {
+  loadFileList()
+  loadHealth()
+})
 </script>
 
 <style scoped>
 .knowledge-page {
-  height: calc(100vh - 140px);
+  padding: 0;
 }
 
-.knowledge-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.header-card {
+  margin-bottom: 16px;
 }
 
-.knowledge-header {
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.knowledge-content {
-  display: grid;
-  grid-template-columns: 350px 1fr;
-  gap: 20px;
-  height: calc(100vh - 220px);
-}
-
-.upload-section {
+.header-left {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
+  align-items: center;
+  gap: 12px;
 }
 
-.section-title {
+.header-left h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.health-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.list-card {
+  min-height: 400px;
+}
+
+.file-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
+}
+
+.file-icon {
+  color: #409eff;
+  font-size: 16px;
+}
+
+.index-status {
+  display: flex;
+  gap: 8px;
+}
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.error-msg {
+  margin-top: 4px;
+}
+
+.error-text {
+  font-size: 12px;
+  color: #f56c6c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+  display: inline-block;
+}
+
+.pagination-wrapper {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .upload-dragger {
@@ -357,12 +477,24 @@ const scrollToBottom = () => {
 
 .upload-dragger :deep(.el-upload-dragger) {
   width: 100%;
-  padding: 30px 20px;
+  padding: 40px 20px;
+}
+
+.uploading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.uploading-state .el-icon {
+  font-size: 48px;
+  color: #409eff;
 }
 
 .upload-icon {
   font-size: 48px;
-  color: #409eff;
+  color: #c0c4cc;
   margin-bottom: 12px;
 }
 
@@ -380,182 +512,5 @@ const scrollToBottom = () => {
 .upload-tip {
   font-size: 12px;
   color: #909399;
-}
-
-.file-list {
-  margin-top: 20px;
-}
-
-.file-list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  font-weight: 500;
-  color: #303133;
-}
-
-.file-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
-  margin-bottom: 8px;
-  transition: all 0.2s;
-}
-
-.file-item:hover {
-  background-color: #ecf5ff;
-}
-
-.file-info {
-  flex: 1;
-  overflow: hidden;
-}
-
-.file-name {
-  font-size: 14px;
-  color: #303133;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-time {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 2px;
-}
-
-.tips-card {
-  margin-top: auto;
-}
-
-.tips-content {
-  font-size: 13px;
-  color: #606266;
-  line-height: 1.8;
-}
-
-.tips-content p {
-  margin: 8px 0;
-}
-
-.chat-section {
-  height: 100%;
-}
-
-.chat-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.chat-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.message-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  background-color: #f5f7fa;
-}
-
-.message-item {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.message-item.self {
-  flex-direction: row-reverse;
-}
-
-.message-content {
-  max-width: 70%;
-  display: flex;
-  flex-direction: column;
-}
-
-.message-item.self .message-content {
-  align-items: flex-end;
-}
-
-.message-meta {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 4px;
-  font-size: 12px;
-  color: #909399;
-}
-
-.message-item.self .message-meta {
-  flex-direction: row-reverse;
-}
-
-.message-bubble {
-  background-color: #ffffff;
-  padding: 12px 16px;
-  border-radius: 8px;
-  word-break: break-word;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.message-item.self .message-bubble {
-  background-color: #409eff;
-  color: #ffffff;
-}
-
-.text-message {
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.message-input-area {
-  border-top: 1px solid #dcdfe6;
-  padding: 16px;
-  background-color: #ffffff;
-}
-
-.input-toolbar {
-  margin-bottom: 12px;
-}
-
-.input-box {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.input-box :deep(.el-textarea) {
-  flex: 1;
-}
-
-@media (max-width: 1200px) {
-  .knowledge-content {
-    grid-template-columns: 300px 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .knowledge-content {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .upload-section {
-    max-height: 400px;
-  }
 }
 </style>
