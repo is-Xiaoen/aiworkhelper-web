@@ -147,20 +147,15 @@
                     <span class="message-time">{{ formatTime(msg.time) }}</span>
                   </div>
                   <div class="message-bubble">
-                    <div v-if="msg.contentType === 1" class="text-message">
-                      {{ msg.content }}
-                    </div>
+                    <!-- AI 消息：空内容时显示 loading，有内容时显示流式文本 -->
+                    <template v-if="msg.contentType === 1">
+                      <div v-if="msg.sendId === 'ai' && !msg.content && aiLoading" class="ai-loading">
+                        <el-icon class="is-loading"><Loading /></el-icon>
+                        <span>AI正在思考中...</span>
+                      </div>
+                      <div v-else class="text-message">{{ msg.content }}</div>
+                    </template>
                     <img v-else-if="msg.contentType === 2" :src="msg.content" class="image-message" />
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="aiLoading" class="message-item other">
-                <el-avatar :size="36">AI</el-avatar>
-                <div class="message-content">
-                  <div class="message-bubble">
-                    <el-icon class="is-loading"><Loading /></el-icon>
-                    AI正在思考中...
                   </div>
                 </div>
               </div>
@@ -1880,6 +1875,22 @@ onBeforeUnmount(() => {
 .text-message {
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.ai-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #909399;
+}
+
+.ai-loading .is-loading {
+  animation: rotating 1.5s linear infinite;
+}
+
+@keyframes rotating {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .image-message {
