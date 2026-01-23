@@ -297,9 +297,9 @@ export interface KnowledgeReindexResp {
 /** 适配器健康状态 */
 export interface AdapterHealthVO {
   name: string        // 适配器名称
-  healthy: boolean    // 是否健康
-  latency: number     // 响应延迟（毫秒）
-  message: string     // 状态消息
+  required: boolean   // 是否必选
+  available: boolean  // 是否可用
+  error: string       // 错误信息
 }
 
 /** 知识库健康检查响应 */
@@ -378,6 +378,104 @@ export interface MeetingRecord {
 
 /** 会议处理状态 */
 export type MeetingStatus = 'uploaded' | 'processing' | 'completed' | 'failed'
+
+// ========== AI 会话持久化类型 ==========
+
+/** AI 会话状态 */
+export type AIConversationStatus = 'active' | 'archived'
+
+/** AI 会话对象 */
+export interface AIConversation {
+  id: string
+  userId: string
+  title: string
+  messageCount: number
+  status: AIConversationStatus
+  createdAt: number
+  updatedAt: number
+  lastActiveAt: number
+  summary?: string
+}
+
+/** 创建会话请求 */
+export interface CreateAIConversationReq {
+  title?: string
+}
+
+/** 更新会话请求 */
+export interface UpdateAIConversationReq {
+  title?: string
+  status?: AIConversationStatus
+}
+
+/** 会话列表请求参数 */
+export interface AIConversationListParams {
+  page?: number
+  pageSize?: number
+  status?: AIConversationStatus
+}
+
+/** 会话列表响应 */
+export interface AIConversationListResp {
+  total: number
+  list: AIConversation[]
+}
+
+/** AI 消息角色 */
+export type AIMessageRole = 'user' | 'assistant' | 'system'
+
+/** AI 消息对象 */
+export interface AIMessage {
+  id: string
+  conversationId: string
+  role: AIMessageRole
+  content: string
+  createdAt: number
+  metadata?: Record<string, unknown>
+}
+
+/** 消息列表请求参数 */
+export interface AIMessageListParams {
+  limit?: number
+  before?: number  // 游标分页：获取此时间戳之前的消息
+}
+
+/** 消息列表响应 */
+export interface AIMessageListResp {
+  list: AIMessage[]
+  hasMore: boolean
+}
+
+/** 发送消息请求 */
+export interface SendAIMessageReq {
+  content: string
+}
+
+/** SSE 事件类型 */
+export type SSEEventType = 'token' | 'done' | 'error' | 'heartbeat'
+
+/** SSE Token 事件数据 */
+export interface SSETokenPayload {
+  content: string
+  done: false
+}
+
+/** SSE Done 事件数据 */
+export interface SSEDonePayload {
+  content: string
+  done: true
+  fullResponse: string
+  conversationId: string
+  userMessageId: string
+  assistantMessageId: string
+  newConversation: boolean
+}
+
+/** SSE Error 事件数据 */
+export interface SSEErrorPayload {
+  error: string
+  code: number
+}
 
 // ========== Multi-Agent 响应类型 ==========
 

@@ -23,17 +23,50 @@
           </template>
 
           <div class="conversation-list">
-            <!-- AI助手 -->
+            <!-- AI助手区域 -->
+            <div class="section-title">
+              <span>AI 助手</span>
+              <el-button size="small" type="primary" link @click="createNewAIConversation">
+                <el-icon><Plus /></el-icon> 新会话
+              </el-button>
+            </div>
+
+            <!-- 新会话入口（当没有选中会话或没有历史会话时显示） -->
             <div
-              :class="['conversation-item', { active: activeConversation === 'ai' }]"
+              v-if="!currentAIConversationId && aiConversations.length === 0"
+              :class="['conversation-item', { active: activeConversation === 'ai' && !currentAIConversationId }]"
               @click="switchConversation(conversations[0])"
             >
               <el-avatar :size="40" style="background-color: #409eff;">AI</el-avatar>
               <div class="conversation-info">
                 <div class="conversation-name">AI助手</div>
-                <div class="conversation-last">你好，我是AI助手</div>
+                <div class="conversation-last">点击开始新对话</div>
               </div>
             </div>
+
+            <!-- AI 会话历史列表 -->
+            <div
+              v-for="aiConv in aiConversations"
+              :key="aiConv.id"
+              :class="['conversation-item', { active: activeConversation === 'ai' && currentAIConversationId === aiConv.id }]"
+              @click="handleAIConversationClick(aiConv)"
+            >
+              <el-avatar :size="40" style="background-color: #409eff;">AI</el-avatar>
+              <div class="conversation-info">
+                <div class="conversation-name">{{ aiConv.title || 'AI 会话' }}</div>
+                <div class="conversation-last">{{ aiConv.summary || formatAIConvTime(aiConv.updatedAt) }}</div>
+              </div>
+              <el-dropdown trigger="click" @command="(cmd: string) => handleAIConvCommand(cmd, aiConv.id)" @click.stop>
+                <el-icon class="conv-action-btn"><MoreFilled /></el-icon>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="delete">删除会话</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+
+            <div class="section-divider"></div>
 
             <!-- 群聊列表 -->
             <div
@@ -243,14 +276,22 @@
 <script setup lang="ts">
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Picture, Loading, Check } from '@element-plus/icons-vue'
+import { Plus, Picture, Loading, Check, MoreFilled } from '@element-plus/icons-vue'
 import { chat } from '@/api/chat'
 import { uploadFile } from '@/api/upload'
 import { getUserList } from '@/api/user'
+import {
+  getConversationList,
+  createConversation,
+  deleteConversation,
+  getMessages,
+  sendStreamMessage,
+  type SSECallbacks
+} from '@/api/aiConversation'
 import { createWebSocket, WebSocketClient } from '@/utils/websocket'
 import { useUserStore } from '@/stores/user'
 import dayjs from 'dayjs'
-import type { WsMessage, User } from '@/types'
+import type { WsMessage, User, AIConversation as AIConv, AIMessage } from '@/types'
 
 const userStore = useUserStore()
 
@@ -322,6 +363,12 @@ const conversations = ref<Conversation[]>([
 const activeConversation = ref('ai')
 const currentChatType = ref<'ai' | 'group' | 'private'>('ai')
 const aiChatType = ref(0)
+
+// AI 会话持久化相关
+const aiConversations = ref<AIConv[]>([])  // 后端持久化的 AI 会话列表
+const currentAIConversationId = ref<string>('')  // 当前 AI 会话 ID
+const aiStreamController = ref<AbortController | null>(null)  // SSE 流式请求控制器
+const aiStreamingContent = ref('')  // SSE 流式内容累积
 
 const currentConversationName = computed(() => {
   return conversations.value.find(c => c.id === activeConversation.value)?.name || ''
@@ -584,6 +631,14 @@ const initWebSocket = async () => {
 
     console.log('[WebSocket] 创建新连接')
     wsClient = createWebSocket(userStore.token)
+
+    // 注册连接状态变化监听器（在connect之前注册，这样能捕获所有状态变化）
+    wsClient.onStatusChange((connected) => {
+      console.log('[WebSocket] 连接状态变化:', connected ? '已连接' : '已断开')
+      wsConnected.value = connected
+      // 移除断开时的弹框警告，改为静默处理，通过顶部标签显示连接状态
+    })
+
     await wsClient.connect()
     wsConnected.value = true
 
@@ -593,18 +648,19 @@ const initWebSocket = async () => {
         console.log('[WebSocket] 消息处理器被调用，处理消息:', message)
         handleReceiveMessage(message)
       }
-      
+
       // 监听消息（只添加一次）
       console.log('[WebSocket] 添加消息监听器')
       wsClient.onMessage(messageHandler)
     }
-    
+
     // 验证处理器是否已添加
     console.log('[WebSocket] 验证处理器注册状态，当前处理器数量:', wsClient['messageHandlers']?.length || 0)
 
     ElMessage.success('WebSocket连接成功')
   } catch (error) {
     console.error('WebSocket连接失败:', error)
+    wsConnected.value = false
     ElMessage.error('WebSocket连接失败')
   }
 }
@@ -925,225 +981,204 @@ const handleSend = async () => {
   }
 }
 
-// 发送AI消息
+// 发送AI消息（使用 SSE 流式响应）
 const sendAIMessage = async () => {
   const content = inputMessage.value.trim()
   if (!content) return
 
   // 添加用户消息到列表
-  messages.value.push({
+  const userMsg: Message = {
     sendId: userStore.userInfo?.id || '',
     senderName: '我',
     content,
     contentType: 1,
     time: Date.now() / 1000,
     isSelf: true
-  })
+  }
+  messages.value.push(userMsg)
 
   inputMessage.value = ''
   scrollToBottom()
 
   aiLoading.value = true
-  try {
-    const res = await chat({
-      prompts: content,
-      chatType: aiChatType.value
-    })
+  aiStreamingContent.value = ''
 
-    if (res.code === 200) {
-      // 格式化AI回复内容
-      let content = ''
-      let rawData = res.data.data
+  // 添加一个占位的 AI 回复消息（用于流式显示）
+  const aiMsgIndex = messages.value.length
+  const aiMsg: Message = {
+    sendId: 'ai',
+    senderName: 'AI助手',
+    content: '',
+    contentType: 1,
+    time: Date.now() / 1000,
+    isSelf: false
+  }
+  messages.value.push(aiMsg)
 
-      console.log('[AI回复] 原始数据类型:', typeof rawData)
-      console.log('[AI回复] 原始数据 (完整):', rawData)
-      console.log('[AI回复] 原始数据长度:', typeof rawData === 'string' ? rawData.length : 'N/A')
-
-      // 如果是字符串，尝试提取其中的JSON
-      if (typeof rawData === 'string') {
-        // 检查是否包含```json代码块（支持```json或```格式）
-        const jsonBlockMatch = rawData.match(/```json\s*\n([\s\S]*?)\n```/) ||
-                               rawData.match(/```\s*\n([\s\S]*?)\n```/) ||
-                               rawData.match(/```json\s*([\s\S]*?)```/) ||
-                               rawData.match(/```([\s\S]*?)```/)
-
-        if (jsonBlockMatch) {
-          try {
-            console.log('[AI回复] 检测到JSON代码块，提取内容')
-            const jsonStr = jsonBlockMatch[1].trim()
-            rawData = JSON.parse(jsonStr)
-            console.log('[AI回复] 成功解析JSON:', rawData)
-          } catch (e) {
-            console.error('[AI回复] JSON解析失败:', e)
-            // 尝试直接解析整个字符串
-            try {
-              rawData = JSON.parse(rawData)
-              console.log('[AI回复] 直接解析原始字符串成功')
-            } catch (e2) {
-              content = rawData
-            }
-          }
-        } else {
-          // 没有代码块，尝试直接解析为JSON
-          try {
-            const parsed = JSON.parse(rawData)
-            rawData = parsed
-            console.log('[AI回复] 直接解析字符串为JSON成功')
-          } catch (e) {
-            // 解析失败，作为普通文本处理
-            content = rawData
-          }
-        }
+  // SSE 回调
+  const callbacks: SSECallbacks = {
+    onToken: (payload) => {
+      // 累积流式内容
+      aiStreamingContent.value += payload.content
+      // 更新消息内容
+      if (messages.value[aiMsgIndex]) {
+        messages.value[aiMsgIndex].content = aiStreamingContent.value
       }
-
-      // 如果成功解析出对象，进行格式化
-      if (content === '' && typeof rawData === 'object' && rawData !== null) {
-        // 检查是否是标准的AI响应格式 {chatType: 1, data: {...}}
-        if (rawData.chatType !== undefined && rawData.data !== undefined) {
-          console.log('[AI回复] 检测到标准AI响应格式, chatType:', rawData.chatType)
-
-          // chatType=1 表示待办查询
-          if (rawData.chatType === 1 && rawData.data !== null && rawData.data.count !== undefined) {
-            const todos = rawData.data.data || []
-            const count = rawData.data.count
-            console.log('[AI回复] 待办查询结果，数量:', count)
-
-            if (count === 0 || todos.length === 0) {
-              content = '📋 暂无待办事项'
-            } else {
-              content = `📋 找到 ${count} 个待办事项:\n\n` +
-                todos.map((todo: any, index: number) => {
-                  const deadline = new Date(todo.deadlineAt * 1000).toLocaleString('zh-CN', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })
-                  const statusText = todo.status === 0 ? '📌 未发布' : todo.status === 1 ? '⏳ 进行中' : '✅ 已完成'
-                  return `${index + 1}. 【${todo.title}】\n` +
-                         `   👤 创建人: ${todo.creatorName}\n` +
-                         `   ⏰ 截止: ${deadline}\n` +
-                         `   ${statusText}\n` +
-                         `   📝 描述: ${todo.desc || '无'}`
-                }).join('\n\n')
-            }
-          }
-          // chatType=3 表示审批查询
-          else if (rawData.chatType === 3 && rawData.data !== null && rawData.data.count !== undefined) {
-            const approvals = rawData.data.data || []
-            const count = rawData.data.count
-            console.log('[AI回复] 审批查询结果，数量:', count)
-
-            if (count === 0 || approvals.length === 0) {
-              content = '📝 暂无审批单'
-            } else {
-              // 审批类型映射（与后端保持一致: 1=通用, 2=请假, 3=补卡, 4=外出, 5=报销, 6=付款, 7=采购, 8=收款）
-              const typeMap: Record<number, string> = {
-                1: '通用', 2: '请假', 3: '补卡', 4: '外出',
-                5: '报销', 6: '付款', 7: '采购', 8: '收款'
-              }
-              // 审批状态映射
-              const statusMap: Record<number, string> = {
-                0: '⏸️ 未开始', 1: '⏳ 进行中',
-                2: '✅ 已通过', 3: '🔙 已撤销', 4: '❌ 已拒绝'
-              }
-
-              content = `📝 找到 ${count} 个审批单:\n\n` +
-                approvals.map((approval: any, index: number) => {
-                  const createTime = approval.createAt
-                    ? new Date(approval.createAt * 1000).toLocaleString('zh-CN', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    : '无'
-                  const typeText = typeMap[approval.type] || '未知'
-                  const statusText = statusMap[approval.status] || '未知'
-
-                  // 通过createId查找创建人名称
-                  const creator = userList.value.find(u => u.id === approval.createId)
-                  const creatorName = creator?.name || approval.creatorId || '未知'
-
-                  return `${index + 1}. 【${approval.title || '无标题'}】\n` +
-                         `   📂 类型: ${typeText}\n` +
-                         `   👤 创建人: ${creatorName}\n` +
-                         `   🕐 创建时间: ${createTime}\n` +
-                         `   ${statusText}\n` +
-                         `   📄 详情: ${approval.abstract || '无'}`
-                }).join('\n\n')
-            }
-          } else {
-            // 其他chatType类型，使用通用格式化
-            content = JSON.stringify(rawData.data, null, 2)
-          }
-        }
-        // 检查是否是嵌套结构的待办查询结果（兼容旧格式）
-        else if (rawData.data && rawData.data.count !== undefined && Array.isArray(rawData.data.data)) {
-          const todos = rawData.data.data
-          const count = rawData.data.count
-          console.log('[AI回复] 检测到嵌套待办结果，数量:', count)
-          if (todos.length === 0) {
-            content = '📋 暂无待办事项'
-          } else {
-            content = `📋 找到 ${count} 个待办事项:\n\n` +
-              todos.map((todo: any, index: number) => {
-                const deadline = new Date(todo.deadlineAt * 1000).toLocaleString('zh-CN', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })
-                const statusText = todo.status === 0 ? '📌 未发布' : todo.status === 1 ? '⏳ 进行中' : '✅ 已完成'
-                return `${index + 1}. 【${todo.title}】\n` +
-                       `   👤 创建人: ${todo.creatorName}\n` +
-                       `   ⏰ 截止: ${deadline}\n` +
-                       `   ${statusText}\n` +
-                       `   📝 描述: ${todo.desc || '无'}`
-              }).join('\n\n')
-          }
-        } else if (Array.isArray(rawData)) {
-          // 直接是数组的情况
-          const todos = rawData
-          console.log('[AI回复] 检测到数组格式，数量:', todos.length)
-          if (todos.length === 0) {
-            content = '暂无待办事项'
-          } else {
-            content = `找到 ${todos.length} 个待办事项:\n\n` +
-              todos.map((todo: any, index: number) => {
-                const deadline = new Date(todo.deadlineAt * 1000).toLocaleString('zh-CN')
-                const statusText = todo.status === 0 ? '未发布' : todo.status === 1 ? '进行中' : '已完成'
-                return `${index + 1}. ${todo.title}\n   创建人: ${todo.creatorName}\n   截止时间: ${deadline}\n   状态: ${statusText}\n   描述: ${todo.desc || '无'}`
-              }).join('\n\n')
-          }
-        } else {
-          // 其他对象类型,使用JSON格式
-          console.log('[AI回复] 其他对象类型，使用JSON格式')
-          content = JSON.stringify(rawData, null, 2)
-        }
-      }
-
-      console.log('[AI回复] 最终格式化内容:', content.substring(0, 100))
-
-      // 添加AI回复
-      messages.value.push({
-        sendId: 'ai',
-        senderName: 'AI助手',
-        content,
-        contentType: 1,
-        time: Date.now() / 1000,
-        isSelf: false
+      scrollToBottom()
+    },
+    onDone: (payload) => {
+      console.log('[AI SSE] 流式完成:', {
+        conversationId: payload.conversationId,
+        newConversation: payload.newConversation,
+        contentLength: payload.fullResponse.length
       })
+
+      // 更新当前会话 ID
+      if (payload.newConversation) {
+        currentAIConversationId.value = payload.conversationId
+        // 刷新会话列表
+        loadAIConversations()
+      }
+
+      // 确保最终内容正确
+      if (messages.value[aiMsgIndex]) {
+        messages.value[aiMsgIndex].content = payload.fullResponse
+      }
+
+      aiLoading.value = false
+      aiStreamController.value = null
+      scrollToBottom()
+    },
+    onError: (payload) => {
+      console.error('[AI SSE] 错误:', payload)
+      ElMessage.error(payload.error || 'AI 请求失败')
+
+      // 移除占位消息
+      if (messages.value[aiMsgIndex]?.content === '') {
+        messages.value.splice(aiMsgIndex, 1)
+      }
+
+      aiLoading.value = false
+      aiStreamController.value = null
+    },
+    onHeartbeat: () => {
+      console.log('[AI SSE] 心跳')
+    }
+  }
+
+  // 发送流式请求
+  try {
+    aiStreamController.value = sendStreamMessage(
+      currentAIConversationId.value,
+      content,
+      callbacks
+    )
+  } catch (error) {
+    console.error('[AI SSE] 发送失败:', error)
+    ElMessage.error('AI 请求失败')
+    aiLoading.value = false
+
+    // 移除占位消息
+    if (messages.value[aiMsgIndex]?.content === '') {
+      messages.value.splice(aiMsgIndex, 1)
+    }
+  }
+}
+
+// 加载 AI 会话列表
+const loadAIConversations = async () => {
+  try {
+    const res = await getConversationList({ page: 1, pageSize: 50 })
+    if (res.code === 200 && res.data) {
+      aiConversations.value = res.data.list || []
+      console.log('[AI会话] 加载会话列表:', aiConversations.value.length, '个')
+    }
+  } catch (error) {
+    console.error('[AI会话] 加载会话列表失败:', error)
+  }
+}
+
+// 创建新的 AI 会话
+const createNewAIConversation = async () => {
+  try {
+    const res = await createConversation()
+    if (res.code === 200 && res.data) {
+      currentAIConversationId.value = res.data.id
+      messages.value = []  // 清空消息
+      await loadAIConversations()
+      ElMessage.success('已创建新会话')
+    }
+  } catch (error) {
+    console.error('[AI会话] 创建会话失败:', error)
+    ElMessage.error('创建会话失败')
+  }
+}
+
+// 切换到指定 AI 会话
+const switchAIConversation = async (convId: string) => {
+  if (convId === currentAIConversationId.value) return
+
+  currentAIConversationId.value = convId
+
+  // 加载该会话的消息
+  try {
+    const res = await getMessages(convId, { limit: 50 })
+    if (res.code === 200 && res.data) {
+      // 转换为本地消息格式
+      messages.value = (res.data.list || []).map((msg: AIMessage) => ({
+        sendId: msg.role === 'user' ? (userStore.userInfo?.id || '') : 'ai',
+        senderName: msg.role === 'user' ? '我' : 'AI助手',
+        content: msg.content,
+        contentType: 1,
+        time: msg.createdAt,
+        isSelf: msg.role === 'user'
+      }))
       scrollToBottom()
     }
   } catch (error) {
-    ElMessage.error('AI请求失败')
-  } finally {
-    aiLoading.value = false
+    console.error('[AI会话] 加载消息失败:', error)
   }
+}
+
+// 删除 AI 会话
+const deleteAIConversation = async (convId: string) => {
+  try {
+    await deleteConversation(convId)
+    await loadAIConversations()
+
+    // 如果删除的是当前会话，切换到新会话
+    if (convId === currentAIConversationId.value) {
+      currentAIConversationId.value = ''
+      messages.value = []
+    }
+
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    console.error('[AI会话] 删除会话失败:', error)
+    ElMessage.error('删除会话失败')
+  }
+}
+
+// 点击 AI 会话历史项
+const handleAIConversationClick = (aiConv: AIConv) => {
+  // 先切换到 AI 聊天类型
+  activeConversation.value = 'ai'
+  currentChatType.value = 'ai'
+  // 然后加载该会话的消息
+  switchAIConversation(aiConv.id)
+}
+
+// 处理 AI 会话下拉菜单命令
+const handleAIConvCommand = (command: string, convId: string) => {
+  if (command === 'delete') {
+    deleteAIConversation(convId)
+  }
+}
+
+// 格式化 AI 会话时间
+const formatAIConvTime = (timestamp: number) => {
+  if (!timestamp) return ''
+  return dayjs.unix(timestamp).format('MM-DD HH:mm')
 }
 
 // 发送群聊消息
@@ -1599,6 +1634,8 @@ const scrollToBottom = () => {
 onMounted(() => {
   // 加载用户列表
   loadUserList()
+  // 加载 AI 会话历史列表
+  loadAIConversations()
   // 自动连接 WebSocket
   initWebSocket()
   // 默认显示AI对话
@@ -1606,6 +1643,13 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  // 中断正在进行的 SSE 流式请求
+  if (aiStreamController.value) {
+    console.log('[组件销毁] 中断 SSE 流式请求')
+    aiStreamController.value.abort()
+    aiStreamController.value = null
+  }
+
   // 断开WebSocket连接并清理所有监听器
   console.log('[组件销毁] 清理WebSocket连接')
 
@@ -1672,6 +1716,25 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: #909399;
   font-weight: normal;
+}
+
+.section-divider {
+  height: 1px;
+  background-color: #e4e7ed;
+  margin: 8px 16px;
+}
+
+.conv-action-btn {
+  padding: 4px;
+  color: #909399;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.conv-action-btn:hover {
+  background-color: #e4e7ed;
+  color: #606266;
 }
 
 .conversation-item {
