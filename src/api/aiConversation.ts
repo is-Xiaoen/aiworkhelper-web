@@ -85,21 +85,33 @@ export interface SSECallbacks {
 
 /**
  * 发送流式消息（SSE）
- * @param conversationId 会话 ID（空字符串表示自动创建新会话）
+ * @param conversationId 会话 ID（必须提供有效的会话 ID，调用前请先通过 createConversation 创建）
  * @param content 消息内容
  * @param callbacks SSE 事件回调
  * @returns AbortController 用于中断流式请求
+ * @throws Error 如果 conversationId 为空
  */
 export function sendStreamMessage(
   conversationId: string,
   content: string,
   callbacks: SSECallbacks
 ): AbortController {
+  // 【防护】确保 conversationId 有效，避免 URL 出现双斜杠导致 404
+  if (!conversationId || !conversationId.trim()) {
+    const errorMsg = 'conversationId 不能为空，请先调用 createConversation 创建会话'
+    console.error('[SSE] ' + errorMsg)
+    // 异步触发错误回调，保持一致的调用模式
+    setTimeout(() => {
+      callbacks.onError?.({ error: errorMsg, code: 400 })
+    }, 0)
+    return new AbortController() // 返回一个无效的控制器
+  }
+
   const abortController = new AbortController()
   const userStore = useUserStore()
 
-  // 构建 URL（conversationId 为空时传空字符串，后端会自动创建）
-  const url = `${BASE_URL}/${conversationId || ''}/messages/stream`
+  // 构建 URL
+  const url = `${BASE_URL}/${conversationId}/messages/stream`
 
   // 使用 fetch API 发送 POST 请求并接收 SSE
   const baseURL = import.meta.env.MODE === 'development'

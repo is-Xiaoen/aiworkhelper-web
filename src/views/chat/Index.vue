@@ -986,6 +986,29 @@ const sendAIMessage = async () => {
   const content = inputMessage.value.trim()
   if (!content) return
 
+  // 【关键修复】确保有有效的会话 ID，避免 URL 出现双斜杠
+  let convId = currentAIConversationId.value
+  if (!convId) {
+    try {
+      console.log('[AI SSE] 没有会话 ID，先创建新会话')
+      const res = await createConversation()
+      if (res.code === 200 && res.data) {
+        convId = res.data.id
+        currentAIConversationId.value = convId
+        console.log('[AI SSE] 新会话创建成功:', convId)
+        // 异步刷新会话列表，不阻塞发送
+        loadAIConversations()
+      } else {
+        ElMessage.error('创建会话失败: ' + (res.msg || '未知错误'))
+        return
+      }
+    } catch (error) {
+      console.error('[AI SSE] 创建会话失败:', error)
+      ElMessage.error('创建会话失败，请稍后重试')
+      return
+    }
+  }
+
   // 添加用户消息到列表
   const userMsg: Message = {
     sendId: userStore.userInfo?.id || '',
@@ -1033,10 +1056,9 @@ const sendAIMessage = async () => {
         contentLength: payload.fullResponse.length
       })
 
-      // 更新当前会话 ID
-      if (payload.newConversation) {
+      // 如果后端返回了新的会话 ID（理论上不应该，因为已经提前创建了）
+      if (payload.conversationId && payload.conversationId !== currentAIConversationId.value) {
         currentAIConversationId.value = payload.conversationId
-        // 刷新会话列表
         loadAIConversations()
       }
 
@@ -1066,10 +1088,10 @@ const sendAIMessage = async () => {
     }
   }
 
-  // 发送流式请求
+  // 发送流式请求（此时 convId 一定有值）
   try {
     aiStreamController.value = sendStreamMessage(
-      currentAIConversationId.value,
+      convId,
       content,
       callbacks
     )
