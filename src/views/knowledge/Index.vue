@@ -9,14 +9,39 @@
         </div>
         <div class="header-right">
           <!-- 健康状态 -->
-          <div class="health-status" v-if="healthData">
-            <el-tooltip :content="healthTooltip" placement="bottom">
-              <el-tag :type="healthData.healthy ? 'success' : 'danger'" effect="plain">
-                <el-icon><component :is="healthData.healthy ? 'CircleCheck' : 'Warning'" /></el-icon>
-                {{ healthData.healthy ? '系统正常' : '部分异常' }}
+          <el-popover
+            v-if="healthData"
+            placement="bottom"
+            :width="280"
+            trigger="hover"
+          >
+            <template #reference>
+              <el-tag
+                :type="healthData.healthy ? 'success' : 'danger'"
+                effect="plain"
+                class="health-tag"
+              >
+                <el-icon v-if="healthData.healthy"><CircleCheck /></el-icon>
+                <el-icon v-else><Warning /></el-icon>
+                <span>{{ healthData.healthy ? '系统正常' : '部分异常' }}</span>
               </el-tag>
-            </el-tooltip>
-          </div>
+            </template>
+            <div class="health-popover">
+              <div class="health-title">索引服务状态</div>
+              <div
+                v-for="(status, key) in healthData.adapters"
+                :key="key"
+                class="health-item"
+              >
+                <span :class="['health-dot', status.available ? 'healthy' : 'unhealthy']"></span>
+                <span class="health-name">{{ status.name }}</span>
+                <span class="health-msg">{{ status.error || (status.available ? '正常' : '异常') }}</span>
+              </div>
+              <div v-if="!healthData.adapters || Object.keys(healthData.adapters).length === 0" class="health-empty">
+                暂无索引服务
+              </div>
+            </div>
+          </el-popover>
           <el-button type="primary" @click="showUploadDialog = true">
             <el-icon><Upload /></el-icon>
             上传文档
@@ -185,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Upload,
@@ -219,16 +244,6 @@ const reindexingIds = ref<Set<string>>(new Set())
 const deletingIds = ref<Set<string>>(new Set())
 const healthData = ref<KnowledgeHealthResp | null>(null)
 
-// 健康状态提示
-const healthTooltip = computed(() => {
-  if (!healthData.value) return '加载中...'
-  const adapters = healthData.value.adapters
-  const lines = Object.entries(adapters).map(([name, status]) => {
-    const icon = status.healthy ? '✓' : '✗'
-    return `${icon} ${status.name}: ${status.message} (${status.latency}ms)`
-  })
-  return lines.join('\n')
-})
 
 // 加载文件列表
 const loadFileList = async () => {
@@ -255,11 +270,14 @@ const loadFileList = async () => {
 const loadHealth = async () => {
   try {
     const res = await getKnowledgeHealth()
+    console.log('[DEBUG] Health API response:', JSON.stringify(res.data, null, 2))
     if (res.code === 200) {
       healthData.value = res.data
+      console.log('[DEBUG] healthData.healthy =', res.data.healthy)
+      console.log('[DEBUG] healthData.adapters =', res.data.adapters)
     }
-  } catch {
-    // 静默处理
+  } catch (e) {
+    console.error('[DEBUG] Health API error:', e)
   }
 }
 
@@ -269,9 +287,29 @@ const handleUpload = async (file: File) => {
   try {
     const res = await uploadKnowledge(file)
     if (res.code === 200) {
-      ElMessage.success(`文档 "${res.data.filename}" 上传成功`)
+      ElMessage.success(`文档 "${res.data.filename}" 上传成功，正在索引...`)
       showUploadDialog.value = false
       await loadFileList()
+
+      // 异步索引完成后自动刷新状态（每2秒检查一次，最多30秒）
+      let retryCount = 0
+      const maxRetries = 15
+      const checkIndexStatus = setInterval(async () => {
+        retryCount++
+        await loadFileList()
+
+        // 检查是否所有文档都已同步完成
+        const allSynced = fileList.value.every(f =>
+          f.indexStatus?.meilisearch === 'synced' || f.indexStatus?.meilisearch === 'failed'
+        )
+
+        if (allSynced || retryCount >= maxRetries) {
+          clearInterval(checkIndexStatus)
+          if (allSynced && retryCount < maxRetries) {
+            ElMessage.success('索引完成')
+          }
+        }
+      }, 2000)
     } else {
       ElMessage.error(res.msg || '上传失败')
     }
@@ -327,10 +365,12 @@ const hasIndexError = (row: KnowledgeFileVO) => {
   return status?.meilisearch === 'failed' || status?.graphrag === 'failed'
 }
 
-// 格式化时间
+// 格式化时间（后端返回秒级时间戳，dayjs 需要毫秒）
 const formatTime = (timestamp: number) => {
   if (!timestamp) return '-'
-  return dayjs(timestamp).format('YYYY-MM-DD HH:mm')
+  // 判断是秒级还是毫秒级时间戳（秒级时间戳小于 10000000000）
+  const ms = timestamp < 10000000000 ? timestamp * 1000 : timestamp
+  return dayjs(ms).format('YYYY-MM-DD HH:mm')
 }
 
 // 格式化文件大小
@@ -419,10 +459,59 @@ onMounted(() => {
   gap: 16px;
 }
 
-.health-status {
-  display: flex;
+.health-tag {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
+  cursor: pointer;
+}
+
+.health-popover {
+  font-size: 13px;
+}
+
+.health-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #303133;
+}
+
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health-dot.healthy {
+  background-color: #67c23a;
+}
+
+.health-dot.unhealthy {
+  background-color: #f56c6c;
+}
+
+.health-name {
+  font-weight: 500;
+  color: #606266;
+}
+
+.health-msg {
+  color: #909399;
+  font-size: 12px;
+}
+
+.health-empty {
+  color: #909399;
+  text-align: center;
+  padding: 8px 0;
 }
 
 .list-card {

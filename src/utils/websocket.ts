@@ -10,10 +10,21 @@ export class WebSocketClient {
   private maxReconnectAttempts = 5
   private messageHandlers: ((message: WsMessage) => void)[] = []
   private savedHandlers: ((message: WsMessage) => void)[] = [] // 保存处理器引用用于重连
+  private statusHandlers: ((connected: boolean) => void)[] = [] // 连接状态变化回调
 
   constructor(url: string, token: string) {
     this.url = url
     this.token = token
+  }
+
+  // 注册连接状态变化回调
+  onStatusChange(handler: (connected: boolean) => void): void {
+    this.statusHandlers.push(handler)
+  }
+
+  // 通知所有状态监听器
+  private notifyStatusChange(connected: boolean): void {
+    this.statusHandlers.forEach(handler => handler(connected))
   }
 
   // 连接WebSocket
@@ -29,6 +40,7 @@ export class WebSocketClient {
           console.log('WebSocket连接成功')
           this.reconnectAttempts = 0
           this.startHeartbeat()
+          this.notifyStatusChange(true) // 通知连接成功
           resolve()
         }
 
@@ -53,6 +65,7 @@ export class WebSocketClient {
         this.ws.onclose = () => {
           console.log('WebSocket连接关闭')
           this.stopHeartbeat()
+          this.notifyStatusChange(false) // 通知连接断开
           this.attemptReconnect()
         }
       } catch (error) {
