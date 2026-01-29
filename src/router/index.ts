@@ -65,6 +65,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Knowledge',
         component: () => import('@/views/knowledge/Index.vue'),
         meta: { title: '知识库', icon: 'Reading' }
+      },
+      {
+        path: '/meeting',
+        name: 'Meeting',
+        component: () => import('@/views/meeting/Index.vue'),
+        meta: { title: '会议助手', icon: 'Microphone' }
       }
     ]
   }
@@ -76,7 +82,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   NProgress.start()
 
   const userStore = useUserStore()

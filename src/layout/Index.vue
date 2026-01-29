@@ -14,15 +14,15 @@
         router
         class="layout-menu"
       >
-        <template v-for="route in menuRoutes" :key="route.path">
+        <template v-for="menuRoute in menuRoutes" :key="menuRoute.path">
           <el-menu-item
-            v-if="!route.meta?.hidden"
-            :index="route.path"
+            v-if="!menuRoute.meta?.hidden"
+            :index="menuRoute.path"
           >
-            <el-icon v-if="route.meta?.icon">
-              <component :is="route.meta.icon" />
+            <el-icon v-if="getIconComponent(menuRoute.meta?.icon as string)">
+              <component :is="getIconComponent(menuRoute.meta?.icon as string)" />
             </el-icon>
-            <template #title>{{ route.meta?.title }}</template>
+            <template #title>{{ menuRoute.meta?.title }}</template>
           </el-menu-item>
         </template>
       </el-menu>
@@ -57,9 +57,9 @@
 
       <!-- 内容区域 -->
       <el-main class="layout-content">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route: viewRoute }">
           <transition name="fade-transform" mode="out-in">
-            <component :is="Component" />
+            <component :is="Component" :key="viewRoute.path" />
           </transition>
         </router-view>
       </el-main>
@@ -109,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, markRaw, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus'
 import {
@@ -121,10 +121,29 @@ import {
   OfficeBuilding,
   User,
   ChatDotRound,
-  Reading
+  Reading,
+  Microphone
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { changePassword } from '@/api/user'
+
+// 图标映射表：将字符串名称映射到实际组件
+const iconMap: Record<string, Component> = {
+  HomeFilled: markRaw(HomeFilled),
+  List: markRaw(List),
+  Document: markRaw(Document),
+  OfficeBuilding: markRaw(OfficeBuilding),
+  User: markRaw(User),
+  ChatDotRound: markRaw(ChatDotRound),
+  Reading: markRaw(Reading),
+  Microphone: markRaw(Microphone)
+}
+
+// 根据名称获取图标组件
+const getIconComponent = (iconName: string | undefined): Component | null => {
+  if (!iconName) return null
+  return iconMap[iconName] || null
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -149,7 +168,7 @@ const passwordRules: FormRules = {
   confirmPwd: [
     { required: true, message: '请确认新密码', trigger: 'blur' },
     {
-      validator: (rule, value, callback) => {
+      validator: (_rule, value, callback) => {
         if (value !== passwordForm.value.newPwd) {
           callback(new Error('两次输入的密码不一致'))
         } else {
@@ -164,10 +183,11 @@ const passwordRules: FormRules = {
 // 当前激活的菜单
 const activeMenu = computed(() => route.path)
 
-// 菜单路由
+// 菜单路由 - 使用原始路由配置而非 getRoutes()
+// getRoutes() 返回扁平化的标准化路由，children 结构不可靠
 const menuRoutes = computed(() => {
-  const routes = router.getRoutes()
-  return routes.find(r => r.path === '/')?.children || []
+  const rootRoute = router.options.routes.find(r => r.path === '/')
+  return rootRoute?.children || []
 })
 
 // 切换侧边栏折叠状态
