@@ -153,7 +153,20 @@
                         <el-icon class="is-loading"><Loading /></el-icon>
                         <span>AI正在思考中...</span>
                       </div>
-                      <div v-else class="text-message">{{ msg.content }}</div>
+                      <template v-else>
+                        <div class="text-message">{{ msg.content }}</div>
+                        <!-- RAG v9.0: 显示来源引用 -->
+                        <CitationList
+                          v-if="msg.citations && msg.citations.length > 0"
+                          :citations="msg.citations"
+                        />
+                        <!-- RAG v9.0: 显示图谱知识 -->
+                        <GraphKnowledgePanel
+                          v-if="(msg.graphEntities && msg.graphEntities.length > 0) || (msg.graphRelations && msg.graphRelations.length > 0)"
+                          :entities="msg.graphEntities || []"
+                          :relations="msg.graphRelations || []"
+                        />
+                      </template>
                     </template>
                     <img v-else-if="msg.contentType === 2" :src="msg.content" class="image-message" />
                   </div>
@@ -286,7 +299,9 @@ import {
 import { createWebSocket, WebSocketClient } from '@/utils/websocket'
 import { useUserStore } from '@/stores/user'
 import dayjs from 'dayjs'
-import type { WsMessage, User, AIConversation as AIConv, AIMessage } from '@/types'
+import type { WsMessage, User, AIConversation as AIConv, AIMessage, Citation, GraphEntity, GraphRelation } from '@/types'
+import CitationList from './components/CitationList.vue'
+import GraphKnowledgePanel from './components/GraphKnowledgePanel.vue'
 
 const userStore = useUserStore()
 
@@ -297,6 +312,14 @@ interface Message {
   contentType: number
   time: number
   isSelf: boolean
+  // RAG v9.0: 来源引用
+  citations?: Citation[]
+  // RAG v9.0: 图谱实体
+  graphEntities?: GraphEntity[]
+  // RAG v9.0: 图谱关系
+  graphRelations?: GraphRelation[]
+  // RAG v9.0: 使用的检索通道
+  usedChannel?: 'direct' | 'document' | 'graph'
 }
 
 interface Conversation {
@@ -1048,7 +1071,8 @@ const sendAIMessage = async () => {
       console.log('[AI SSE] 流式完成:', {
         conversationId: payload.conversationId,
         newConversation: payload.newConversation,
-        contentLength: payload.fullResponse.length
+        contentLength: payload.fullResponse.length,
+        hasRagMetadata: !!payload.ragMetadata
       })
 
       // 如果后端返回了新的会话 ID（理论上不应该，因为已经提前创建了）
@@ -1057,9 +1081,27 @@ const sendAIMessage = async () => {
         loadAIConversations()
       }
 
-      // 确保最终内容正确
+      // 更新消息内容和 RAG v9.0 元数据
       if (messages.value[aiMsgIndex]) {
+        // 设置最终内容（流式内容已经累积，fullResponse 是完整版本）
         messages.value[aiMsgIndex].content = payload.fullResponse
+
+        // RAG v9.0: 从 ragMetadata 字段提取元数据（推荐方式）
+        if (payload.ragMetadata) {
+          console.log('[AI SSE] RAG 元数据:', payload.ragMetadata)
+          if (payload.ragMetadata.citations && payload.ragMetadata.citations.length > 0) {
+            messages.value[aiMsgIndex].citations = payload.ragMetadata.citations
+          }
+          if (payload.ragMetadata.graphEntities && payload.ragMetadata.graphEntities.length > 0) {
+            messages.value[aiMsgIndex].graphEntities = payload.ragMetadata.graphEntities
+          }
+          if (payload.ragMetadata.graphRelations && payload.ragMetadata.graphRelations.length > 0) {
+            messages.value[aiMsgIndex].graphRelations = payload.ragMetadata.graphRelations
+          }
+          if (payload.ragMetadata.usedChannel) {
+            messages.value[aiMsgIndex].usedChannel = payload.ragMetadata.usedChannel
+          }
+        }
       }
 
       aiLoading.value = false
@@ -1141,15 +1183,24 @@ const switchAIConversation = async (convId: string) => {
   try {
     const res = await getMessages(convId, { limit: 50 })
     if (res.code === 200 && res.data) {
-      // 转换为本地消息格式
-      messages.value = (res.data.list || []).map((msg: AIMessage) => ({
-        sendId: msg.role === 'user' ? (userStore.userInfo?.id || '') : 'ai',
-        senderName: msg.role === 'user' ? '我' : 'AI助手',
-        content: msg.content,
-        contentType: 1,
-        time: msg.createdAt,
-        isSelf: msg.role === 'user'
-      }))
+      // 转换为本地消息格式（v9.0: 支持从 metadata 恢复 RAG 元数据）
+      messages.value = (res.data.list || []).map((msg: AIMessage) => {
+        // 提取 RAG 元数据（如有）
+        const ragMeta = msg.metadata?.ragMetadata as Record<string, unknown> | undefined
+        return {
+          sendId: msg.role === 'user' ? (userStore.userInfo?.id || '') : 'ai',
+          senderName: msg.role === 'user' ? '我' : 'AI助手',
+          content: msg.content,
+          contentType: 1,
+          time: msg.createdAt,
+          isSelf: msg.role === 'user',
+          // v9.0: 恢复 RAG 元数据（知识库引用、图谱实体等）
+          citations: ragMeta?.citations as Citation[] | undefined,
+          graphEntities: ragMeta?.graphEntities as GraphEntity[] | undefined,
+          graphRelations: ragMeta?.graphRelations as GraphRelation[] | undefined,
+          usedChannel: ragMeta?.usedChannel as string | undefined
+        }
+      })
       scrollToBottom()
     }
   } catch (error) {

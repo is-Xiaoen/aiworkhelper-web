@@ -460,6 +460,14 @@ export interface SSETokenPayload {
   done: false
 }
 
+/** RAG 元数据载荷（v9.0） */
+export interface RAGMetadataPayload {
+  usedChannel?: 'direct' | 'document' | 'graph'
+  citations?: Citation[]
+  graphEntities?: GraphEntity[]
+  graphRelations?: GraphRelation[]
+}
+
 /** SSE Done 事件数据 */
 export interface SSEDonePayload {
   content: string
@@ -469,6 +477,8 @@ export interface SSEDonePayload {
   userMessageId: string
   assistantMessageId: string
   newConversation: boolean
+  /** v9.0: RAG 元数据（知识库查询时填充） */
+  ragMetadata?: RAGMetadataPayload
 }
 
 /** SSE Error 事件数据 */
@@ -496,4 +506,79 @@ export interface ParsedAIResponse {
   type: 'text' | 'meeting_summary' | 'meeting_todos' | 'todo_list' | 'approval_list' | 'knowledge' | 'json'
   content: string
   structured?: unknown
+  /** RAG v9.0: 来源引用列表 */
+  citations?: Citation[]
+  /** RAG v9.0: 图谱实体（仅图谱查询时有值） */
+  graphEntities?: GraphEntity[]
+  /** RAG v9.0: 图谱关系（仅图谱查询时有值） */
+  graphRelations?: GraphRelation[]
+  /** RAG v9.0: 使用的检索通道 */
+  usedChannel?: 'direct' | 'document' | 'graph'
+}
+
+// ========== RAG v9.0 类型定义 ==========
+
+/** 文档引用来源 */
+export interface Citation {
+  /** 引用编号，对应答案中的 [1], [2] 等标注 */
+  index: number
+  /** 文档标题 */
+  title: string
+  /** 来源类型（vector/bm25/graph） */
+  source: string
+  /** 原始文档 ID */
+  sourceId: string
+  /** 页码（如适用） */
+  pageNumber?: number
+  /** 引用片段预览 */
+  snippet?: string
+}
+
+/** 图谱实体信息 */
+export interface GraphEntity {
+  /** 实体名称 */
+  name: string
+  /** 实体类型 */
+  type?: string
+  /** 实体描述 */
+  description?: string
+}
+
+/** 图谱关系信息 */
+export interface GraphRelation {
+  /** 源实体名称 */
+  source: string
+  /** 目标实体名称 */
+  target: string
+  /** 关系类型 */
+  relation: string
+  /** 关系描述 */
+  description?: string
+}
+
+/** RAG 检索结果（来自后端 RAGResult） */
+export interface RAGResult {
+  /** 最终生成的答案 */
+  answer: string
+  /** 使用的检索通道 */
+  usedChannel?: 'direct' | 'document' | 'graph'
+  /** 来源引用列表 */
+  citations?: Citation[]
+  /** 图谱实体（仅 graph 通道） */
+  graphEntities?: GraphEntity[]
+  /** 图谱关系（仅 graph 通道） */
+  graphRelations?: GraphRelation[]
+  /** 检索决策信息 */
+  decision?: {
+    needRetrieval: boolean
+    strategy: string
+    reasoning: string
+  }
+  /** 质量评估 */
+  quality?: {
+    score: number
+    isRelevant: boolean
+  }
+  /** 迭代次数 */
+  iterations?: number
 }
