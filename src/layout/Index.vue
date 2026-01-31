@@ -246,132 +246,152 @@ const handleLogout = () => {
 </script>
 
 <style scoped>
-.layout-container {
-  width: 100%;
-  height: 100vh;
-}
+.layout-container { width: 100%; height: 100vh; }
 
+/* 侧边栏 - 深色渐变 + 微光效果 */
 .layout-aside {
-  background: var(--color-primary);
-  transition: width 0.28s;
+  background: linear-gradient(180deg, #2d3a4f 0%, #1e2836 100%);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+  position: relative;
+}
+.layout-aside::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 120px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+  pointer-events: none;
 }
 
+/* Logo区域 */
 .logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 60px;
-  font-size: 18px;
+  height: 64px;
+  font-size: 17px;
   font-weight: 600;
-  color: var(--bg-card);
-  background: var(--color-primary-dark);
-  letter-spacing: 1px;
+  color: #fff;
+  background: rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  letter-spacing: 2px;
+  position: relative;
+  z-index: 1;
 }
 
+/* 菜单样式 */
 .layout-menu {
   border-right: none;
-  background: var(--color-primary);
-  --el-menu-bg-color: var(--color-primary);
-  --el-menu-text-color: var(--color-secondary);
-  --el-menu-hover-bg-color: var(--color-primary-dark);
-  --el-menu-active-color: var(--bg-card);
+  background: transparent;
+  --el-menu-bg-color: transparent;
+  --el-menu-text-color: rgba(255,255,255,0.7);
+  --el-menu-hover-bg-color: rgba(255,255,255,0.1);
+  --el-menu-active-color: #fff;
+  padding: 12px 8px;
+}
+.layout-menu :deep(.el-menu-item) {
+  margin: 4px 0;
+  border-radius: 8px;
+  height: 44px;
+  line-height: 44px;
+  transition: all 0.25s;
+}
+.layout-menu :deep(.el-menu-item:hover) {
+  background: rgba(255,255,255,0.1);
+  transform: translateX(4px);
+}
+.layout-menu :deep(.el-menu-item.is-active) {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  font-weight: 500;
+}
+.layout-menu :deep(.el-menu-item.is-active)::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 3px; height: 18px;
+  background: #fff;
+  border-radius: 0 2px 2px 0;
 }
 
-.layout-main {
-  background-color: var(--bg-page);
-}
+/* 主体区域 */
+.layout-main { background: var(--bg-layout); }
 
+/* 头部 - 毛玻璃效果 */
 .layout-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-sm);
+  height: 60px;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.9);
+  box-shadow: 0 1px 12px rgba(0,0,0,0.04);
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
+.header-left { display: flex; align-items: center; gap: 16px; }
 
 .collapse-icon {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
   font-size: 18px;
   cursor: pointer;
-  border-radius: var(--radius-base);
-  color: var(--color-primary);
-  transition: all 0.3s;
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: rgba(0,0,0,0.02);
+  border: 1px solid rgba(0,0,0,0.04);
+  transition: all 0.25s;
 }
-
 .collapse-icon:hover {
-  background: var(--color-secondary);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(52,68,91,0.25);
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-}
+.header-right { display: flex; align-items: center; }
 
 .user-info {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
+  gap: 10px;
+  padding: 6px 14px 6px 6px;
   cursor: pointer;
-  border-radius: var(--radius-round);
-  transition: all 0.3s;
+  border-radius: 24px;
+  background: rgba(0,0,0,0.02);
+  border: 1px solid rgba(0,0,0,0.04);
+  transition: all 0.25s;
 }
-
 .user-info:hover {
-  background: var(--color-secondary);
+  background: var(--color-secondary-light);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .user-avatar {
-  width: 32px;
-  height: 32px;
-  background: var(--color-secondary);
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--color-info) 0%, #667eea 100%);
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-primary);
-  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(64,158,255,0.3);
 }
 
 .username {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-primary);
+  color: var(--text-primary);
 }
 
-.layout-content {
-  padding: 20px;
-  overflow-y: auto;
-}
+/* 内容区域 */
+.layout-content { padding: 20px; overflow-y: auto; }
 
 /* 路由过渡动画 */
-.fade-transform-leave-active,
-.fade-transform-enter-active {
-  transition: all 0.2s;
-}
-
-.fade-transform-enter-from {
-  opacity: 0;
-  transform: translateX(-30px);
-}
-
-.fade-transform-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
-}
+.fade-transform-leave-active, .fade-transform-enter-active { transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+.fade-transform-enter-from { opacity: 0; transform: translateX(-20px); }
+.fade-transform-leave-to { opacity: 0; transform: translateX(20px); }
 </style>

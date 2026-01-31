@@ -42,6 +42,7 @@
   --bg-card: #ffffff;
   --bg-overlay: #f5f7fa;
   --bg-hover: #f0f2f5;
+  --bg-layout: linear-gradient(135deg, #e8eef5 0%, #f3f6f9 50%, #eef2f7 100%);
 
   /* 边框色 */
   --border-base: #dcdfe6;
@@ -66,8 +67,8 @@
   /* 圆角 */
   --radius-sm: 4px;
   --radius-base: 8px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-lg: 12px;
+  --radius-xl: 18px;
   --radius-round: 50px;
 }
 

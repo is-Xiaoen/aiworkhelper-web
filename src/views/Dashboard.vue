@@ -16,15 +16,9 @@
         </div>
 
         <div class="quick-capsules">
-          <div class="capsule" @click="handleNav('/todo')">
-            <el-icon><Plus /></el-icon> 记一笔
-          </div>
-          <div class="capsule" @click="handleNav('/approval/create')">
-            <el-icon><Position /></el-icon> 发起
-          </div>
-          <div class="capsule ai-capsule" @click="handleNav('/chat')">
-            <el-icon><MagicStick /></el-icon> AI 助手
-          </div>
+          <AppButton :icon="Plus" @click="handleNav('/todo')">记一笔</AppButton>
+          <AppButton :icon="Position" @click="handleNav('/approval/create')">发起</AppButton>
+          <AppButton type="primary" :icon="MagicStick" @click="handleNav('/chat')">AI 助手</AppButton>
         </div>
       </header>
 
@@ -52,8 +46,18 @@
           </div>
 
           <div class="panel-body custom-scroll">
+            <!-- Loading骨架屏 -->
+            <div v-if="todoLoading" class="skeleton-list">
+              <div v-for="i in 3" :key="i" class="skeleton-item">
+                <div class="skeleton-circle"></div>
+                <div class="skeleton-content">
+                  <div class="skeleton-line skeleton-title"></div>
+                  <div class="skeleton-line skeleton-sub"></div>
+                </div>
+              </div>
+            </div>
             <el-empty
-              v-if="todoList.length === 0"
+              v-else-if="todoList.length === 0"
               :image-size="60"
               description="无事一身轻"
             />
@@ -85,8 +89,18 @@
           </div>
 
           <div class="panel-body custom-scroll">
+            <!-- Loading骨架屏 -->
+            <div v-if="approvalLoading" class="skeleton-list timeline-skeleton">
+              <div v-for="i in 3" :key="i" class="skeleton-item">
+                <div class="skeleton-dot"></div>
+                <div class="skeleton-content">
+                  <div class="skeleton-line skeleton-title"></div>
+                  <div class="skeleton-line skeleton-sub"></div>
+                </div>
+              </div>
+            </div>
             <el-empty
-              v-if="approvalList.length === 0"
+              v-else-if="approvalList.length === 0"
               :image-size="60"
               description="暂无记录"
             />
@@ -165,6 +179,8 @@ const stats = ref({
 });
 const todoList = ref<Todo[]>([]);
 const approvalList = ref<Approval[]>([]);
+const todoLoading = ref(true);
+const approvalLoading = ref(true);
 
 const statItems = computed(() => [
   { label: "待办", value: stats.value.todoCount, icon: List },
@@ -224,10 +240,14 @@ const loadData = async () => {
       todoList.value = todoRes.data.data;
       stats.value.todoCount = todoRes.data.count;
     }
+    todoLoading.value = false;
+
     if (appRes.code === 200) {
       approvalList.value = appRes.data.data;
       stats.value.approvalCount = appRes.data.count;
     }
+    approvalLoading.value = false;
+
     if (userRes.code === 200) {
       stats.value.userCount = userRes.data.count;
     }
@@ -236,6 +256,8 @@ const loadData = async () => {
     }
   } catch (error) {
     console.error("Load data error", error);
+    todoLoading.value = false;
+    approvalLoading.value = false;
   }
 };
 
@@ -338,34 +360,10 @@ onMounted(() => loadData());
   font-size: 14px;
 }
 
-/* 胶囊按钮 */
+/* 快捷按钮组 */
 .quick-capsules {
   display: flex;
   gap: 12px;
-}
-.capsule {
-  padding: 10px 20px;
-  background: var(--bg-card);
-  border-radius: var(--radius-round);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-primary);
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.3s ease;
-}
-.capsule:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-base);
-  background: var(--color-primary);
-  color: var(--bg-card);
-}
-.ai-capsule {
-  background: var(--gradient-primary);
-  color: var(--bg-card);
 }
 
 /* 统计卡片 */
@@ -427,7 +425,7 @@ onMounted(() => loadData());
 /* 内容网格 */
 .content-grid {
   display: grid;
-  grid-template-columns: 1.5fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
   flex: 1;
   min-height: 0;
@@ -647,11 +645,66 @@ onMounted(() => loadData());
 }
 
 /* 滚动条 */
-.custom-scroll::-webkit-scrollbar {
-  width: 4px;
+.custom-scroll::-webkit-scrollbar { width: 4px; }
+.custom-scroll::-webkit-scrollbar-thumb { background: var(--border-base); border-radius: var(--radius-sm); }
+
+/* 骨架屏Loading */
+.skeleton-list { display: flex; flex-direction: column; gap: 12px; }
+.skeleton-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: var(--glass-bg);
+  border-radius: var(--radius-lg);
 }
-.custom-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-base);
-  border-radius: var(--radius-sm);
+.skeleton-circle {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--color-secondary) 25%, var(--color-secondary-light) 50%, var(--color-secondary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+.skeleton-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--color-secondary) 25%, var(--color-secondary-light) 50%, var(--color-secondary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+.skeleton-content { flex: 1; }
+.skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--color-secondary) 25%, var(--color-secondary-light) 50%, var(--color-secondary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+.skeleton-title { width: 70%; margin-bottom: 8px; }
+.skeleton-sub { width: 40%; height: 12px; }
+.timeline-skeleton { padding-left: 24px; position: relative; }
+.timeline-skeleton::before {
+  content: '';
+  position: absolute;
+  left: 20px; top: 24px; bottom: 24px;
+  width: 2px;
+  background: var(--color-secondary);
+  border-radius: 1px;
+  animation: pulse 1.5s infinite;
+}
+.timeline-skeleton .skeleton-dot {
+  position: absolute;
+  left: -4px;
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 </style>
