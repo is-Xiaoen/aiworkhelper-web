@@ -42,7 +42,9 @@
         <div class="header-right">
           <el-dropdown @command="handleCommand">
             <div class="user-info">
-              <el-avatar :size="32">{{ userStore.userInfo?.name?.[0] || 'U' }}</el-avatar>
+              <div class="user-avatar">
+                <el-icon><User /></el-icon>
+              </div>
               <span class="username">{{ userStore.userInfo?.name }}</span>
             </div>
             <template #dropdown>
@@ -250,7 +252,7 @@ const handleLogout = () => {
 }
 
 .layout-aside {
-  background-color: #304156;
+  background: var(--color-primary);
   transition: width 0.28s;
   overflow: hidden;
 }
@@ -260,47 +262,59 @@ const handleLogout = () => {
   align-items: center;
   justify-content: center;
   height: 60px;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
-  color: #ffffff;
-  background-color: #2b3a4a;
+  color: var(--bg-card);
+  background: var(--color-primary-dark);
+  letter-spacing: 1px;
 }
 
 .layout-menu {
   border-right: none;
-  background-color: #304156;
-  --el-menu-bg-color: #304156;
-  --el-menu-text-color: #bfcbd9;
-  --el-menu-hover-bg-color: #263445;
-  --el-menu-active-color: #409eff;
+  background: var(--color-primary);
+  --el-menu-bg-color: var(--color-primary);
+  --el-menu-text-color: var(--color-secondary);
+  --el-menu-hover-bg-color: var(--color-primary-dark);
+  --el-menu-active-color: var(--bg-card);
 }
 
 .layout-main {
-  background-color: #f0f2f5;
+  background-color: var(--bg-page);
 }
 
 .layout-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  background-color: #ffffff;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  padding: 0 24px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .header-left {
   display: flex;
   align-items: center;
+  gap: 16px;
 }
 
 .collapse-icon {
-  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
   cursor: pointer;
+  border-radius: var(--radius-base);
+  color: var(--color-primary);
   transition: all 0.3s;
 }
 
 .collapse-icon:hover {
-  color: #409eff;
+  background: var(--color-secondary);
+  color: var(--color-primary);
 }
 
 .header-right {
@@ -311,13 +325,33 @@ const handleLogout = () => {
 .user-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  padding: 6px 12px;
   cursor: pointer;
+  border-radius: var(--radius-round);
+  transition: all 0.3s;
+}
+
+.user-info:hover {
+  background: var(--color-secondary);
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  background: var(--color-secondary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+  font-size: 16px;
 }
 
 .username {
   font-size: 14px;
-  color: #303133;
+  font-weight: 500;
+  color: var(--color-primary);
 }
 
 .layout-content {

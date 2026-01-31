@@ -1,334 +1,657 @@
 <template>
-  <div class="dashboard">
-    <el-row :gutter="20">
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="stat-card" shadow="hover">
-          <div class="stat-content">
-            <div class="stat-icon" style="background-color: #409eff;">
-              <el-icon :size="32"><List /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ stats.todoCount }}</div>
-              <div class="stat-label">待办事项</div>
+  <div class="fluid-dashboard">
+    <div class="bg-blob blob-1"></div>
+    <div class="bg-blob blob-2"></div>
+
+    <div class="main-container">
+      <header class="glass-header">
+        <div class="greeting-box">
+          <div class="avatar-placeholder">
+            <el-icon><UserFilled /></el-icon>
+          </div>
+          <div class="greeting-text">
+            <h1>Hi, 同学</h1>
+            <p>今天是 {{ currentDate }}，状态不错！</p>
+          </div>
+        </div>
+
+        <div class="quick-capsules">
+          <div class="capsule" @click="handleNav('/todo')">
+            <el-icon><Plus /></el-icon> 记一笔
+          </div>
+          <div class="capsule" @click="handleNav('/approval/create')">
+            <el-icon><Position /></el-icon> 发起
+          </div>
+          <div class="capsule ai-capsule" @click="handleNav('/chat')">
+            <el-icon><MagicStick /></el-icon> AI 助手
+          </div>
+        </div>
+      </header>
+
+      <div class="stats-scroller">
+        <div
+          class="stat-island"
+          v-for="(item, index) in statItems"
+          :key="index"
+        >
+          <div class="island-icon">
+            <el-icon><component :is="item.icon" /></el-icon>
+          </div>
+          <div class="island-data">
+            <span class="island-num">{{ item.value }}</span>
+            <span class="island-label">{{ item.label }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="content-grid">
+        <div class="glass-panel todo-panel">
+          <div class="panel-head">
+            <h3><span class="marker"></span>待办事项</h3>
+            <span class="link-text" @click="handleNav('/todo')">查看全部</span>
+          </div>
+
+          <div class="panel-body custom-scroll">
+            <el-empty
+              v-if="todoList.length === 0"
+              :image-size="60"
+              description="无事一身轻"
+            />
+            <div v-else class="fluid-list">
+              <div
+                v-for="todo in todoList"
+                :key="todo.id"
+                class="fluid-item"
+                @click="handleNav('/todo')"
+              >
+                <div class="check-circle"></div>
+                <div class="fluid-content">
+                  <div class="fluid-title">{{ todo.title }}</div>
+                  <div class="fluid-time">
+                    {{ formatDate(todo.deadlineAt) }}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </el-card>
-      </el-col>
+        </div>
 
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="stat-card" shadow="hover">
-          <div class="stat-content">
-            <div class="stat-icon" style="background-color: #67c23a;">
-              <el-icon :size="32"><Document /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ stats.approvalCount }}</div>
-              <div class="stat-label">审批申请</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="stat-card" shadow="hover">
-          <div class="stat-content">
-            <div class="stat-icon" style="background-color: #e6a23c;">
-              <el-icon :size="32"><User /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ stats.userCount }}</div>
-              <div class="stat-label">用户数量</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="stat-card" shadow="hover">
-          <div class="stat-content">
-            <div class="stat-icon" style="background-color: #f56c6c;">
-              <el-icon :size="32"><OfficeBuilding /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ stats.depCount }}</div>
-              <div class="stat-label">部门数量</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-row :gutter="20" style="margin-top: 20px;">
-      <el-col :xs="24" :lg="12">
-        <el-card>
-          <template #header>
-            <div class="card-header">
-              <span>待办事项</span>
-              <el-button text @click="$router.push('/todo')">查看更多</el-button>
-            </div>
-          </template>
-          <el-empty v-if="todoList.length === 0" description="暂无待办事项" />
-          <div v-else class="todo-list">
-            <div
-              v-for="todo in todoList"
-              :key="todo.id"
-              class="todo-item"
+        <div class="glass-panel approval-panel">
+          <div class="panel-head">
+            <h3>审批动态</h3>
+            <span class="link-text" @click="handleNav('/approval')"
+              >进度中心</span
             >
-              <div class="todo-title">{{ todo.title }}</div>
-              <div class="todo-time">{{ formatDate(todo.deadlineAt) }}</div>
-            </div>
           </div>
-        </el-card>
-      </el-col>
 
-      <el-col :xs="24" :lg="12">
-        <el-card>
-          <template #header>
-            <div class="card-header">
-              <span>审批申请</span>
-              <el-button text @click="$router.push('/approval')">查看更多</el-button>
-            </div>
-          </template>
-          <el-empty v-if="approvalList.length === 0" description="暂无审批申请" />
-          <div v-else class="approval-list">
-            <div
-              v-for="approval in approvalList"
-              :key="approval.id"
-              class="approval-item"
-            >
-              <div class="approval-title">{{ approval.title }}</div>
-              <el-tag :type="getApprovalStatusType(approval.status)" size="small">
-                {{ getApprovalStatusText(approval.status) }}
-              </el-tag>
+          <div class="panel-body custom-scroll">
+            <el-empty
+              v-if="approvalList.length === 0"
+              :image-size="60"
+              description="暂无记录"
+            />
+            <div v-else class="timeline-box">
+              <div
+                v-for="approval in approvalList"
+                :key="approval.id"
+                class="timeline-item"
+              >
+                <div
+                  class="timeline-dot"
+                  :class="getStatusColorClass(approval.status)"
+                ></div>
+                <div class="timeline-content">
+                  <div class="t-head">
+                    <span class="t-title">{{ approval.title }}</span>
+                    <span
+                      class="t-tag"
+                      :class="getStatusColorClass(approval.status)"
+                    >
+                      {{ getApprovalStatusText(approval.status) }}
+                    </span>
+                  </div>
+                  <div class="t-date">
+                    更新于 {{ formatDate(Date.now() / 1000) }}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-row style="margin-top: 20px;">
-      <el-col :span="24">
-        <el-card>
-          <template #header>
-            <span>快速操作</span>
-          </template>
-          <div class="quick-actions">
-            <el-button type="primary" @click="$router.push('/todo')">
-              <el-icon><Plus /></el-icon>
-              创建待办
-            </el-button>
-            <el-button type="success" @click="$router.push('/approval/create')">
-              <el-icon><Plus /></el-icon>
-              发起审批
-            </el-button>
-            <el-button type="info" @click="$router.push('/chat')">
-              <el-icon><ChatDotRound /></el-icon>
-              AI助手
-            </el-button>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { List, Document, User, OfficeBuilding, Plus, ChatDotRound } from '@element-plus/icons-vue'
-import { getTodoList } from '@/api/todo'
-import { getApprovalList } from '@/api/approval'
-import { getUserList } from '@/api/user'
-import { getDepSoa } from '@/api/department'
-import { useUserStore } from '@/stores/user'
-import dayjs from 'dayjs'
-import type { Todo, Approval } from '@/types'
+import { ref, onMounted, computed } from "vue";
+import { useRouter } from "vue-router"; // 引入路由钩子
+import {
+  List,
+  Document,
+  User,
+  OfficeBuilding,
+  Plus,
+  MagicStick,
+  Position,
+  UserFilled,
+} from "@element-plus/icons-vue";
+import dayjs from "dayjs";
+import { getTodoList } from "@/api/todo";
+import { getApprovalList } from "@/api/approval";
+import { getUserList } from "@/api/user";
+import { getDepSoa } from "@/api/department";
+import { useUserStore } from "@/stores/user";
+import type { Todo, Approval } from "@/types";
 
-const userStore = useUserStore()
+// --- 核心逻辑 ---
+const router = useRouter(); // 初始化路由实例
+const userStore = useUserStore();
 
+// 显式跳转函数 (解决跳转失效问题)
+const handleNav = (path: string) => {
+  console.log("Navigating to:", path);
+  router.push(path).catch((err) => {
+    console.error("Navigation failed:", err);
+  });
+};
+
+// --- 数据状态 ---
 const stats = ref({
   todoCount: 0,
   approvalCount: 0,
   userCount: 0,
-  depCount: 0
-})
+  depCount: 0,
+});
+const todoList = ref<Todo[]>([]);
+const approvalList = ref<Approval[]>([]);
 
-const todoList = ref<Todo[]>([])
-const approvalList = ref<Approval[]>([])
+const statItems = computed(() => [
+  { label: "待办", value: stats.value.todoCount, icon: List },
+  { label: "审批", value: stats.value.approvalCount, icon: Document },
+  { label: "用户", value: stats.value.userCount, icon: User },
+  { label: "部门", value: stats.value.depCount, icon: OfficeBuilding },
+]);
 
-const formatDate = (timestamp: number) => {
-  return dayjs.unix(timestamp).format('YYYY-MM-DD HH:mm')
-}
+const currentDate = dayjs().format("MM月DD日");
+const formatDate = (ts: number) => dayjs.unix(ts).format("MM-DD HH:mm");
 
-const getApprovalStatusType = (status: number) => {
-  // 后端状态: 0=未开始, 1=处理中, 2=通过, 3=拒绝, 4=撤销, 5=自动通过
-  const types: any = {
-    0: 'info',
-    1: 'warning',
-    2: 'success',
-    3: 'danger',
-    4: 'info',
-    5: 'success'
-  }
-  return types[status] || 'info'
-}
+// 状态辅助函数
+const getStatusColorClass = (status: number) => {
+  const map: any = {
+    0: "color-gray",
+    1: "color-blue",
+    2: "color-green",
+    3: "color-red",
+    5: "color-green",
+  };
+  return map[status] || "color-gray";
+};
 
 const getApprovalStatusText = (status: number) => {
-  // 后端状态: 0=未开始, 1=处理中, 2=通过, 3=拒绝, 4=撤销, 5=自动通过
   const texts: any = {
-    0: '未开始',
-    1: '处理中',
-    2: '已通过',
-    3: '已拒绝',
-    4: '已撤销',
-    5: '自动通过'
-  }
-  return texts[status] || '未知'
-}
+    0: "未开始",
+    1: "审批中",
+    2: "已通过",
+    3: "驳回",
+    4: "撤销",
+    5: "自动通过",
+  };
+  return texts[status] || "未知";
+};
 
-// 递归统计部门数量
+// 递归统计
 const countDepartments = (departments: any[]): number => {
-  if (!departments || departments.length === 0) return 0
+  if (!departments || departments.length === 0) return 0;
+  let count = departments.length;
+  departments.forEach((dep) => {
+    if (dep.child) count += countDepartments(dep.child);
+  });
+  return count;
+};
 
-  let count = departments.length
-  departments.forEach(dep => {
-    if (dep.child && Array.isArray(dep.child)) {
-      count += countDepartments(dep.child)
-    }
-  })
-  return count
-}
-
+// 数据加载
 const loadData = async () => {
   try {
-    // 加载待办事项
-    const todoRes = await getTodoList({
-      userId: userStore.userInfo?.id,
-      page: 1,
-      count: 5
-    })
+    const [todoRes, appRes, userRes, depRes] = await Promise.all([
+      getTodoList({ userId: userStore.userInfo?.id, page: 1, count: 5 }),
+      getApprovalList({ userId: userStore.userInfo?.id, page: 1, count: 5 }),
+      getUserList({ page: 1, count: 1 }),
+      getDepSoa(),
+    ]);
+
     if (todoRes.code === 200) {
-      todoList.value = todoRes.data.data
-      stats.value.todoCount = todoRes.data.count
+      todoList.value = todoRes.data.data;
+      stats.value.todoCount = todoRes.data.count;
     }
-
-    // 加载审批申请
-    const approvalRes = await getApprovalList({
-      userId: userStore.userInfo?.id,
-      page: 1,
-      count: 5
-    })
-    if (approvalRes.code === 200) {
-      approvalList.value = approvalRes.data.data
-      stats.value.approvalCount = approvalRes.data.count
+    if (appRes.code === 200) {
+      approvalList.value = appRes.data.data;
+      stats.value.approvalCount = appRes.data.count;
     }
-
-    // 加载用户统计
-    const userRes = await getUserList({ page: 1, count: 1 })
     if (userRes.code === 200) {
-      stats.value.userCount = userRes.data.count
+      stats.value.userCount = userRes.data.count;
     }
-
-    // 加载部门统计
-    const depRes = await getDepSoa()
     if (depRes.code === 200) {
-      const departments = depRes.data?.child || []
-      stats.value.depCount = countDepartments(departments)
+      stats.value.depCount = countDepartments(depRes.data?.child || []);
     }
   } catch (error) {
-    console.error('加载数据失败:', error)
+    console.error("Load data error", error);
   }
-}
+};
 
-onMounted(() => {
-  loadData()
-})
+onMounted(() => loadData());
 </script>
 
 <style scoped>
-.dashboard {
-  padding: 0;
+/* 页面容器 - 占满内容区域 */
+.fluid-dashboard {
+  position: relative;
+  margin: -20px;
+  padding: 24px;
+  width: calc(100% + 40px);
+  height: calc(100% + 40px);
+  background: var(--bg-page);
+  overflow: hidden;
+  box-sizing: border-box;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-.stat-card {
+/* 背景装饰 */
+.bg-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: 0;
+  animation: float 10s infinite ease-in-out;
+}
+.blob-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--color-secondary);
+  top: -100px;
+  right: -50px;
+  opacity: 0.8;
+}
+.blob-2 {
+  width: 300px;
+  height: 300px;
+  background: var(--color-secondary-light);
+  bottom: 0;
+  left: -50px;
+  animation-delay: -5s;
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(20px, 30px);
+  }
+}
+
+.main-container {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 顶部区域 */
+.glass-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
-
-.stat-content {
+.greeting-box {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
 }
-
-.stat-icon {
+.avatar-placeholder {
+  width: 46px;
+  height: 46px;
+  background: var(--color-secondary);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
-  border-radius: 8px;
-  color: #ffffff;
+  color: var(--color-primary);
+  font-size: 22px;
+  border: 2px solid var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+.greeting-text h1 {
+  margin: 0;
+  font-size: 24px;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.greeting-text p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
-.stat-info {
-  flex: 1;
+/* 胶囊按钮 */
+.quick-capsules {
+  display: flex;
+  gap: 12px;
 }
-
-.stat-value {
-  font-size: 28px;
+.capsule {
+  padding: 10px 20px;
+  background: var(--bg-card);
+  border-radius: var(--radius-round);
+  font-size: 14px;
   font-weight: 600;
-  color: #303133;
-  margin-bottom: 5px;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #909399;
-}
-
-.card-header {
+  color: var(--color-primary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+}
+.capsule:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-base);
+  background: var(--color-primary);
+  color: var(--bg-card);
+}
+.ai-capsule {
+  background: var(--gradient-primary);
+  color: var(--bg-card);
 }
 
-.todo-list,
-.approval-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.todo-item,
-.approval-item {
+/* 统计卡片 */
+.stats-scroller {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
+  gap: 16px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  padding-bottom: 10px;
 }
-
-.todo-item:last-child,
-.approval-item:last-child {
-  border-bottom: none;
+.stats-scroller::-webkit-scrollbar {
+  display: none;
 }
-
-.todo-title,
-.approval-title {
+.stat-island {
   flex: 1;
-  font-size: 14px;
-  color: #303133;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.todo-time {
-  font-size: 12px;
-  color: #909399;
-}
-
-.quick-actions {
+  min-width: 160px;
+  padding: 20px;
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+  transition: all 0.3s ease;
+}
+.stat-island:hover {
+  transform: translateY(-5px) scale(1.02);
+  background: var(--glass-bg-hover);
+}
+.island-icon {
+  width: 50px;
+  height: 50px;
+  background: var(--gradient-primary);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg-card);
+  font-size: 24px;
+  box-shadow: var(--shadow-sm);
+}
+.island-data {
+  display: flex;
+  flex-direction: column;
+}
+.island-num {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--color-primary);
+}
+.island-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* 内容网格 */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 玻璃面板 */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.panel-head h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.marker {
+  width: 6px;
+  height: 18px;
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+}
+.link-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.link-text:hover {
+  color: var(--color-primary);
+}
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+  min-height: 0;
+}
+
+/* 待办列表 */
+.fluid-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fluid-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: var(--glass-bg);
+  border-radius: var(--radius-lg);
+  transition: all 0.2s;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.fluid-item:hover {
+  background: var(--bg-card);
+  transform: translateX(6px);
+  border-color: var(--color-secondary);
+  box-shadow: var(--shadow-sm);
+}
+.check-circle {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-secondary);
+  border-radius: 50%;
+  margin-right: 14px;
+  box-sizing: border-box;
+}
+.fluid-content {
+  flex: 1;
+}
+.fluid-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.fluid-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* 审批时间轴 */
+.timeline-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  padding-left: 24px;
+}
+.timeline-box::before {
+  content: "";
+  position: absolute;
+  left: 20px;
+  top: 24px;
+  bottom: 24px;
+  width: 2px;
+  background: var(--color-secondary);
+  border-radius: 1px;
+}
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  position: relative;
+  background: var(--glass-bg);
+  border-radius: var(--radius-lg);
+  transition: all 0.2s;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.timeline-item:hover {
+  background: var(--bg-card);
+  transform: translateX(6px);
+  border-color: var(--color-secondary);
+  box-shadow: var(--shadow-sm);
+}
+.timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: absolute;
+  left: -11px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 2px solid var(--bg-page);
+  box-sizing: content-box;
+}
+.timeline-content {
+  flex: 1;
+}
+.t-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.t-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.t-tag {
+  font-size: 12px;
+  font-weight: 600;
+}
+.t-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* 状态颜色 */
+.color-gray {
+  background: var(--color-secondary);
+  color: var(--text-secondary);
+}
+.timeline-dot.color-gray {
+  background: var(--color-secondary-dark);
+}
+.color-blue {
+  background: #6b8cae;
+  color: #6b8cae;
+}
+.timeline-dot.color-blue {
+  background: #6b8cae;
+}
+.t-tag.color-blue {
+  background: transparent;
+}
+.color-green {
+  background: #7dab8f;
+  color: #7dab8f;
+}
+.timeline-dot.color-green {
+  background: #7dab8f;
+}
+.t-tag.color-green {
+  background: transparent;
+}
+.color-red {
+  background: #c48a8a;
+  color: #c48a8a;
+}
+.timeline-dot.color-red {
+  background: #c48a8a;
+}
+.t-tag.color-red {
+  background: transparent;
+}
+
+/* 响应式 */
+@media (max-width: 900px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+  .greeting-text h1 {
+    font-size: 20px;
+  }
+}
+
+/* 滚动条 */
+.custom-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-base);
+  border-radius: var(--radius-sm);
 }
 </style>

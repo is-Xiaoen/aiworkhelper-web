@@ -1,4 +1,77 @@
-/* 全局样式 */
+/* ========== 全局 CSS 变量 ========== */
+:root {
+  /* 品牌主色 */
+  --color-primary: #34445b;
+  --color-primary-light: #4a5d78;
+  --color-primary-dark: #2b3a4a;
+
+  /* 次要色 */
+  --color-secondary: #dae3ec;
+  --color-secondary-light: #e8eef5;
+  --color-secondary-dark: #c5d3e0;
+
+  /* 功能色 - 成功 */
+  --color-success: #10b981;
+  --color-success-light: #d1fae5;
+  --color-success-dark: #059669;
+
+  /* 功能色 - 警告 */
+  --color-warning: #e6a23c;
+  --color-warning-light: #fdf6ec;
+  --color-warning-dark: #cf9236;
+
+  /* 功能色 - 危险/错误 */
+  --color-danger: #f56c6c;
+  --color-danger-light: #fef0f0;
+  --color-danger-dark: #dd6161;
+
+  /* 功能色 - 信息 */
+  --color-info: #409eff;
+  --color-info-light: #ecf5ff;
+  --color-info-dark: #337ecc;
+
+  /* 文本色 */
+  --text-primary: #2c3e50;
+  --text-regular: #606266;
+  --text-secondary: #909399;
+  --text-placeholder: #c0c4cc;
+  --text-light: #7f8c8d;
+
+  /* 背景色 */
+  --bg-page: #f3f6f9;
+  --bg-card: #ffffff;
+  --bg-overlay: #f5f7fa;
+  --bg-hover: #f0f2f5;
+
+  /* 边框色 */
+  --border-base: #dcdfe6;
+  --border-light: #e4e7ed;
+  --border-lighter: #ebeef5;
+
+  /* 玻璃态效果 */
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-bg-hover: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.8);
+
+  /* 阴影 */
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.03);
+  --shadow-base: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-soft: 0 8px 32px rgba(31, 38, 135, 0.07);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.12);
+
+  /* 渐变 */
+  --gradient-primary: linear-gradient(135deg, #34445b, #4a5d78);
+  --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-base: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-round: 50px;
+}
+
+/* ========== 全局样式 ========== */
 * {
   margin: 0;
   padding: 0;
@@ -20,26 +93,26 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #dcdfe6;
-  border-radius: 4px;
+  background-color: var(--border-base);
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #c0c4cc;
+  background-color: var(--text-placeholder);
 }
 
 ::-webkit-scrollbar-track {
-  background-color: #f5f7fa;
+  background-color: var(--bg-overlay);
 }
 
 /* NProgress样式调整 */
 #nprogress .bar {
-  background: #409eff !important;
+  background: var(--color-info) !important;
   height: 3px !important;
 }
 
 #nprogress .peg {
-  box-shadow: 0 0 10px #409eff, 0 0 5px #409eff !important;
+  box-shadow: 0 0 10px var(--color-info), 0 0 5px var(--color-info) !important;
 }
 
 /* 通用工具类 */
