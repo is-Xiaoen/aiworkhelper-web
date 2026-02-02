@@ -2441,7 +2441,7 @@ onBeforeUnmount(() => {
 
 /* ========== 输入区域 ========== */
 .chat-input-area {
-  padding: 16px 24px;
+  padding: 12px 20px;
   border-top: 1px solid var(--border-lighter);
   background: var(--bg-card);
   display: flex;
@@ -2460,11 +2460,11 @@ onBeforeUnmount(() => {
 }
 .chat-textarea :deep(.el-textarea__inner) {
   height: 100% !important;
-  min-height: 80px;
-  border-radius: var(--radius-lg);
+  min-height: 52px;
+  border-radius: var(--radius-base);
   border: 1px solid var(--border-light);
   background: var(--bg-overlay);
-  padding: 12px 16px;
+  padding: 10px 14px;
   font-size: 14px;
   line-height: 1.5;
   resize: none;
@@ -2480,13 +2480,13 @@ onBeforeUnmount(() => {
 }
 
 .send-btn {
-  padding: 0 32px;
-  min-height: 80px;
+  padding: 0 24px;
+  min-height: 52px;
   border: none;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-base);
   background: var(--color-primary);
   color: white;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
