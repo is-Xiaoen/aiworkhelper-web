@@ -8,10 +8,21 @@
       <!-- 页面头部 -->
       <div class="page-header">
         <div class="page-header-info">
-          <h1>知识库管理</h1>
-          <p>文档索引与知识图谱管理中心</p>
+          <div class="breadcrumb">
+            <span class="breadcrumb-link" @click="goBack">知识库</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current">{{ workspaceName }}</span>
+          </div>
+          <h1>{{ workspaceName }}</h1>
+          <p v-if="!isUncategorized">管理此工作空间中的文档</p>
+          <p v-else>未归入任何工作空间的文档</p>
         </div>
         <div class="header-actions">
+          <!-- 返回按钮 -->
+          <button class="secondary-btn" @click="goBack">
+            <el-icon class="btn-icon"><Back /></el-icon>
+            返回
+          </button>
           <!-- 健康状态 -->
           <div v-if="healthData" class="health-status" :class="{ healthy: healthData.healthy }">
             <span class="health-dot"></span>
@@ -271,16 +282,27 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Back } from '@element-plus/icons-vue'
 import {
   uploadKnowledge,
   getKnowledgeList,
   deleteKnowledge,
   reindexKnowledge,
-  getKnowledgeHealth
+  getKnowledgeHealth,
+  getKnowledgeWorkspace
 } from '@/api/knowledge'
 import type { KnowledgeFileVO, KnowledgeHealthResp } from '@/types'
 import dayjs from 'dayjs'
+
+const route = useRoute()
+const router = useRouter()
+
+// 工作空间相关
+const workspaceId = ref('')
+const workspaceName = ref('')
+const isUncategorized = ref(false)
 
 // 状态
 const loading = ref(false)
@@ -304,13 +326,42 @@ const pendingCount = computed(() =>
   fileList.value.filter(f => f.indexStatus?.meilisearch === 'pending').length
 )
 
+// 加载工作空间信息
+const loadWorkspaceInfo = async () => {
+  const id = route.params.workspaceId as string
+  workspaceId.value = id
+
+  if (id === 'uncategorized') {
+    isUncategorized.value = true
+    workspaceName.value = '未分类文档'
+    return
+  }
+
+  isUncategorized.value = false
+  try {
+    const res = await getKnowledgeWorkspace(id)
+    if (res.code === 200) {
+      workspaceName.value = res.data.name
+    }
+  } catch (e) {
+    console.error('Load workspace info error:', e)
+    workspaceName.value = '知识库'
+  }
+}
+
+// 返回工作空间列表
+const goBack = () => {
+  router.push('/knowledge')
+}
+
 // 加载文件列表
 const loadFileList = async () => {
   loading.value = true
   try {
     const res = await getKnowledgeList({
       page: currentPage.value,
-      count: pageSize.value
+      count: pageSize.value,
+      workspaceId: workspaceId.value
     })
     if (res.code === 200) {
       fileList.value = res.data.list || []
@@ -341,7 +392,11 @@ const loadHealth = async () => {
 const handleUpload = async (file: File) => {
   uploading.value = true
   try {
-    const res = await uploadKnowledge(file)
+    // 未分类文档不传 workspaceId
+    const res = await uploadKnowledge(
+      file,
+      isUncategorized.value ? undefined : workspaceId.value
+    )
     if (res.code === 200) {
       ElMessage.success(`文档 "${res.data.filename}" 上传成功，正在索引...`)
       showUploadDialog.value = false
@@ -475,7 +530,8 @@ const getStatusText = (status: string | undefined) => {
 }
 
 // 初始化
-onMounted(() => {
+onMounted(async () => {
+  await loadWorkspaceInfo()
   loadFileList()
   loadHealth()
 })
@@ -486,11 +542,64 @@ onMounted(() => {
   min-height: 100%;
 }
 
+/* 面包屑 */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.breadcrumb-link {
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.breadcrumb-link:hover {
+  opacity: 0.8;
+}
+
+.breadcrumb-separator {
+  color: var(--text-placeholder);
+}
+
+.breadcrumb-current {
+  color: var(--text-secondary);
+}
+
 /* 页面头部 */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--bg-card);
+  color: var(--text-regular);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-base);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.secondary-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* 健康状态 */
@@ -1254,23 +1363,6 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-}
-
-.secondary-btn {
-  padding: 10px 20px;
-  background: var(--bg-card);
-  color: var(--text-regular);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-base);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.secondary-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
 }
 
 .secondary-btn:disabled {
