@@ -154,7 +154,11 @@ const form = reactive<Partial<Approval>>({
   title: '',
   abstract: '',
   reason: '',
-  userId: userStore.userInfo?.id || '',
+  user: {
+    userId: userStore.userInfo?.id || '',
+    userName: userStore.userInfo?.name || '',
+    status: 0
+  },
   no: `SP${Date.now()}`,
   status: 0,
   leave: {
@@ -225,7 +229,7 @@ const handleSubmit = async () => {
         if (submitData.leave) {
           submitData.leave = {
             ...submitData.leave,
-            reason: form.reason, // 将原因字段复制到请假详情中
+            reason: form.reason || '', // 将原因字段复制到请假详情中
             startTime: typeof submitData.leave.startTime === 'string'
               ? parseInt(submitData.leave.startTime)
               : submitData.leave.startTime,
@@ -238,7 +242,7 @@ const handleSubmit = async () => {
         if (submitData.goOut) {
           submitData.goOut = {
             ...submitData.goOut,
-            reason: form.reason, // 将原因字段复制到外出详情中
+            reason: form.reason || '', // 将原因字段复制到外出详情中
             startTime: typeof submitData.goOut.startTime === 'string'
               ? parseInt(submitData.goOut.startTime)
               : submitData.goOut.startTime,
@@ -251,7 +255,7 @@ const handleSubmit = async () => {
         if (submitData.makeCard) {
           submitData.makeCard = {
             ...submitData.makeCard,
-            reason: form.reason, // 将原因字段复制到补卡详情中
+            reason: form.reason || '', // 将原因字段复制到补卡详情中
             date: typeof submitData.makeCard.date === 'string'
               ? parseInt(submitData.makeCard.date)
               : submitData.makeCard.date

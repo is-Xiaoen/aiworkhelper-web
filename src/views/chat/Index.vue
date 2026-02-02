@@ -1,239 +1,269 @@
 <template>
   <div class="chat-page">
-    <el-row :gutter="20" style="height: 100%;">
+    <!-- 背景装饰 -->
+    <div class="bg-blob blob-1"></div>
+    <div class="bg-blob blob-2"></div>
+    <div class="bg-blob blob-3"></div>
+
+    <div class="chat-layout">
       <!-- 左侧会话列表 -->
-      <el-col :xs="24" :sm="8" :md="6" style="height: 100%;">
-        <el-card class="chat-sidebar" body-style="padding: 0;">
-          <template #header>
-            <div class="sidebar-header">
-              <span>消息</span>
-              <el-dropdown @command="handleMenuCommand">
-                <el-button circle size="small">
-                  <el-icon><Plus /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="ai">AI对话</el-dropdown-item>
-                    <el-dropdown-item command="group">群聊</el-dropdown-item>
-                    <el-dropdown-item command="private">发起私聊</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+      <aside class="chat-sidebar">
+        <div class="sidebar-header">
+          <h3 class="sidebar-title">
+            <span class="title-icon"></span>
+            消息
+          </h3>
+          <el-dropdown @command="handleMenuCommand">
+            <button class="add-btn">
+              <span class="add-icon"></span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="ai">AI对话</el-dropdown-item>
+                <el-dropdown-item command="group">群聊</el-dropdown-item>
+                <el-dropdown-item command="private">发起私聊</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+
+        <div class="conversation-list">
+          <!-- AI助手区域 -->
+          <div class="section-header">
+            <span class="section-label">AI 助手</span>
+            <button class="new-chat-btn" @click="createNewAIConversation">
+              <span class="plus-icon"></span>
+              新会话
+            </button>
+          </div>
+
+          <!-- 新会话入口（当没有选中会话或没有历史会话时显示） -->
+          <div
+            v-if="!currentAIConversationId && aiConversations.length === 0"
+            :class="['conv-item', { active: activeConversation === 'ai' && !currentAIConversationId }]"
+            @click="switchConversation(conversations[0])"
+          >
+            <div class="conv-avatar ai">
+              <span class="avatar-icon ai-icon"></span>
             </div>
-          </template>
-
-          <div class="conversation-list">
-            <!-- AI助手区域 -->
-            <div class="section-title">
-              <span>AI 助手</span>
-              <el-button size="small" type="primary" link @click="createNewAIConversation">
-                <el-icon><Plus /></el-icon> 新会话
-              </el-button>
-            </div>
-
-            <!-- 新会话入口（当没有选中会话或没有历史会话时显示） -->
-            <div
-              v-if="!currentAIConversationId && aiConversations.length === 0"
-              :class="['conversation-item', { active: activeConversation === 'ai' && !currentAIConversationId }]"
-              @click="switchConversation(conversations[0])"
-            >
-              <el-avatar :size="40" style="background-color: #409eff;">AI</el-avatar>
-              <div class="conversation-info">
-                <div class="conversation-name">AI助手</div>
-                <div class="conversation-last">点击开始新对话</div>
-              </div>
-            </div>
-
-            <!-- AI 会话历史列表 -->
-            <div
-              v-for="aiConv in aiConversations"
-              :key="aiConv.id"
-              :class="['conversation-item', { active: activeConversation === 'ai' && currentAIConversationId === aiConv.id }]"
-              @click="handleAIConversationClick(aiConv)"
-            >
-              <el-avatar :size="40" style="background-color: #409eff;">AI</el-avatar>
-              <div class="conversation-info">
-                <div class="conversation-name">{{ aiConv.title || 'AI 会话' }}</div>
-                <div class="conversation-last">{{ aiConv.summary || formatAIConvTime(aiConv.updatedAt) }}</div>
-              </div>
-              <el-dropdown trigger="click" @command="(cmd: string) => handleAIConvCommand(cmd, aiConv.id)" @click.stop>
-                <el-icon class="conv-action-btn"><MoreFilled /></el-icon>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="delete">删除会话</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-
-            <div class="section-divider"></div>
-
-            <!-- 群聊列表 -->
-            <div
-              v-for="conv in groupConversations"
-              :key="conv.id"
-              :class="['conversation-item', { active: activeConversation === conv.id }]"
-              @click="switchConversation(conv)"
-            >
-              <el-avatar :size="40" style="background-color: #67c23a;">群</el-avatar>
-              <div class="conversation-info">
-                <div class="conversation-name">{{ conv.name }}</div>
-                <div class="conversation-last">{{ conv.lastMessage || '暂无消息' }}</div>
-              </div>
-            </div>
-
-            <!-- 已有私聊会话列表（按最新消息时间排序） -->
-            <div
-              v-for="conv in sortedPrivateConversations"
-              :key="conv.id"
-              :class="['conversation-item', {
-                active: activeConversation === conv.id
-              }]"
-              @click="switchConversation(conv)"
-            >
-              <el-avatar :size="40">{{ conv.name[0] }}</el-avatar>
-              <div class="conversation-info">
-                <div class="conversation-name">{{ conv.name }}</div>
-                <div class="conversation-last">
-                  {{ conv.lastMessage || '暂无消息' }}
-                </div>
-              </div>
-            </div>
-
-            <!-- 没有会话的其他用户 -->
-            <div
-              v-for="user in usersWithoutConversation"
-              :key="user.id"
-              :class="['conversation-item', {
-                active: isUserInActivePrivateChat(user.id)
-              }]"
-              @click="startPrivateChatWithUser(user)"
-            >
-              <el-avatar :size="40">{{ user.name[0] }}</el-avatar>
-              <div class="conversation-info">
-                <div class="conversation-name">{{ user.name }}</div>
-                <div class="conversation-last">点击开始聊天</div>
-              </div>
+            <div class="conv-info">
+              <div class="conv-name">AI助手</div>
+              <div class="conv-preview">点击开始新对话</div>
             </div>
           </div>
-        </el-card>
-      </el-col>
+
+          <!-- AI 会话历史列表 -->
+          <div
+            v-for="aiConv in aiConversations"
+            :key="aiConv.id"
+            :class="['conv-item', { active: activeConversation === 'ai' && currentAIConversationId === aiConv.id }]"
+            @click="handleAIConversationClick(aiConv)"
+          >
+            <div class="conv-avatar ai">
+              <span class="avatar-icon ai-icon"></span>
+            </div>
+            <div class="conv-info">
+              <div class="conv-name">{{ aiConv.title || 'AI 会话' }}</div>
+              <div class="conv-preview">{{ aiConv.summary || formatAIConvTime(aiConv.updatedAt) }}</div>
+            </div>
+            <el-dropdown trigger="click" @command="(cmd: string) => handleAIConvCommand(cmd, aiConv.id)" @click.stop>
+              <button class="conv-more-btn">
+                <span class="more-icon"></span>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="delete">删除会话</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <!-- 群聊列表 -->
+          <div
+            v-for="conv in groupConversations"
+            :key="conv.id"
+            :class="['conv-item', { active: activeConversation === conv.id }]"
+            @click="switchConversation(conv)"
+          >
+            <div class="conv-avatar group">
+              <span class="avatar-icon group-icon"></span>
+            </div>
+            <div class="conv-info">
+              <div class="conv-name">{{ conv.name }}</div>
+              <div class="conv-preview">{{ conv.lastMessage || '暂无消息' }}</div>
+            </div>
+          </div>
+
+          <!-- 已有私聊会话列表（按最新消息时间排序） -->
+          <div
+            v-for="conv in sortedPrivateConversations"
+            :key="conv.id"
+            :class="['conv-item', { active: activeConversation === conv.id }]"
+            @click="switchConversation(conv)"
+          >
+            <div class="conv-avatar user">
+              <span class="avatar-text">{{ conv.name[0] }}</span>
+            </div>
+            <div class="conv-info">
+              <div class="conv-name">{{ conv.name }}</div>
+              <div class="conv-preview">{{ conv.lastMessage || '暂无消息' }}</div>
+            </div>
+          </div>
+
+          <!-- 没有会话的其他用户 -->
+          <div
+            v-for="user in usersWithoutConversation"
+            :key="user.id"
+            :class="['conv-item', { active: isUserInActivePrivateChat(user.id) }]"
+            @click="startPrivateChatWithUser(user)"
+          >
+            <div class="conv-avatar user">
+              <span class="avatar-text">{{ user.name[0] }}</span>
+            </div>
+            <div class="conv-info">
+              <div class="conv-name">{{ user.name }}</div>
+              <div class="conv-preview">点击开始聊天</div>
+            </div>
+          </div>
+        </div>
+      </aside>
 
       <!-- 右侧聊天区域 -->
-      <el-col :xs="24" :sm="16" :md="18" style="height: 100%;">
-        <el-card class="chat-main">
-          <template #header>
-            <div class="chat-header">
-              <span>{{ currentConversationName }}</span>
-              <el-tag v-if="wsConnected" type="success" size="small">已连接</el-tag>
-              <el-tag v-else type="danger" size="small">未连接</el-tag>
-            </div>
-          </template>
+      <main class="chat-main">
+        <div class="chat-header">
+          <div class="header-info">
+            <h2 class="chat-title">{{ currentConversationName }}</h2>
+          </div>
+          <div class="header-status">
+            <span :class="['status-dot', wsConnected ? 'online' : 'offline']"></span>
+            <span class="status-text">{{ wsConnected ? '已连接' : '未连接' }}</span>
+          </div>
+        </div>
 
-          <div class="chat-container">
-            <!-- 消息列表 -->
-            <div ref="messageListRef" class="message-list">
-              <div
-                v-for="(msg, index) in sortedMessages"
-                :key="index"
-                :class="['message-item', msg.isSelf ? 'self' : 'other']"
-              >
-                <el-avatar :size="36">
-                  {{ msg.senderName?.[0] || 'U' }}
-                </el-avatar>
-                <div class="message-content">
-                  <div class="message-meta">
-                    <span class="sender-name">{{ msg.senderName }}</span>
-                    <span class="message-time">{{ formatTime(msg.time) }}</span>
-                  </div>
-                  <div class="message-bubble">
-                    <!-- AI 消息：空内容时显示 loading，有内容时显示流式文本 -->
-                    <template v-if="msg.contentType === 1">
-                      <div v-if="msg.sendId === 'ai' && !msg.content && aiLoading" class="ai-loading">
-                        <el-icon class="is-loading"><Loading /></el-icon>
-                        <span>AI正在思考中...</span>
-                      </div>
-                      <template v-else>
-                        <div class="text-message">{{ msg.content }}</div>
-                        <!-- RAG v9.0: 显示来源引用 -->
-                        <CitationList
-                          v-if="msg.citations && msg.citations.length > 0"
-                          :citations="msg.citations"
-                        />
-                        <!-- RAG v9.0: 显示图谱知识 -->
-                        <GraphKnowledgePanel
-                          v-if="(msg.graphEntities && msg.graphEntities.length > 0) || (msg.graphRelations && msg.graphRelations.length > 0)"
-                          :entities="msg.graphEntities || []"
-                          :relations="msg.graphRelations || []"
-                        />
-                      </template>
-                    </template>
-                    <img v-else-if="msg.contentType === 2" :src="msg.content" class="image-message" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 输入区域 -->
-            <div class="message-input-area">
-              <div class="input-box" style="position: relative;">
-                <el-input
-                  ref="inputRef"
-                  v-model="inputMessage"
-                  type="textarea"
-                  :rows="3"
-                  :placeholder="currentChatType === 'group' ? '输入 @ 可提及群成员或AI...' : '请输入消息...'"
-                  @keydown.enter.ctrl="handleSend"
-                  @input="handleInputChange"
-                  @keydown="handleKeyDown"
-                />
-
-                <!-- @ 提及选择器 -->
-                <div
-                  v-if="showMentionList && currentChatType === 'group'"
-                  class="mention-list"
-                  :style="{ bottom: mentionListBottom + 'px' }"
-                >
-                  <div
-                    v-for="(item, index) in mentionFilteredList"
-                    :key="item.id"
-                    :class="['mention-item', { active: mentionSelectedIndex === index }]"
-                    @click="selectMention(item)"
-                    @mouseenter="mentionSelectedIndex = index"
-                  >
-                    <el-avatar :size="32">{{ item.name[0] }}</el-avatar>
-                    <span class="mention-name">{{ item.name }}</span>
-                  </div>
-                  <div v-if="mentionFilteredList.length === 0" class="mention-empty">
-                    无匹配结果
-                  </div>
-                </div>
-
-                <el-button
-                  type="primary"
-                  :loading="sending"
-                  @click="handleSend"
-                >
-                  发送 (Ctrl+Enter)
-                </el-button>
+        <div class="chat-body">
+          <!-- 加载状态 -->
+          <div v-if="messagesLoading" class="message-list loading-state">
+            <div class="loading-skeleton" v-for="i in 4" :key="i" :class="i % 2 === 0 ? 'self' : 'other'">
+              <div class="skeleton-avatar"></div>
+              <div class="skeleton-content">
+                <div class="skeleton-meta"></div>
+                <div class="skeleton-bubble"></div>
               </div>
             </div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+
+          <!-- 消息列表 -->
+          <div v-else ref="messageListRef" class="message-list">
+            <div
+              v-for="(msg, index) in sortedMessages"
+              :key="index"
+              :class="['msg-row', msg.isSelf ? 'self' : 'other']"
+            >
+              <div class="msg-avatar" :class="{ 'ai-avatar': msg.sendId === 'ai' }">
+                <span v-if="msg.sendId === 'ai'" class="avatar-icon ai-icon"></span>
+                <span v-else class="avatar-text">{{ msg.senderName?.[0] || 'U' }}</span>
+              </div>
+              <div class="msg-content">
+                <div class="msg-meta">
+                  <span class="msg-sender">{{ msg.senderName }}</span>
+                  <span class="msg-time">{{ formatTime(msg.time) }}</span>
+                </div>
+                <div class="msg-bubble">
+                  <!-- AI 消息：空内容时显示 loading，有内容时显示流式文本 -->
+                  <template v-if="msg.contentType === 1">
+                    <div v-if="msg.sendId === 'ai' && !msg.content && aiLoading" class="ai-thinking">
+                      <span class="thinking-dot"></span>
+                      <span class="thinking-dot"></span>
+                      <span class="thinking-dot"></span>
+                      <span class="thinking-text">AI正在思考中...</span>
+                    </div>
+                    <template v-else>
+                      <div class="msg-text">{{ msg.content }}</div>
+                      <!-- RAG v9.0: 显示来源引用 -->
+                      <CitationList
+                        v-if="msg.citations && msg.citations.length > 0"
+                        :citations="msg.citations"
+                      />
+                      <!-- RAG v9.0: 显示图谱知识 -->
+                      <GraphKnowledgePanel
+                        v-if="(msg.graphEntities && msg.graphEntities.length > 0) || (msg.graphRelations && msg.graphRelations.length > 0)"
+                        :entities="msg.graphEntities || []"
+                        :relations="msg.graphRelations || []"
+                      />
+                    </template>
+                  </template>
+                  <img v-else-if="msg.contentType === 2" :src="msg.content" class="msg-image" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="chat-input-area">
+          <div class="input-wrapper">
+            <el-input
+              ref="inputRef"
+              v-model="inputMessage"
+              type="textarea"
+              :rows="3"
+              :placeholder="currentChatType === 'group' ? '输入 @ 可提及群成员或AI，Enter发送' : '输入消息，Enter发送'"
+              class="chat-textarea"
+              @keydown.enter.exact.prevent="handleSend"
+              @keydown.enter.shift="() => {}"
+              @input="handleInputChange"
+              @keydown="handleKeyDown"
+            />
+
+            <!-- @ 提及选择器 -->
+            <div
+              v-if="showMentionList && currentChatType === 'group'"
+              class="mention-popup"
+              :style="{ bottom: mentionListBottom + 'px' }"
+            >
+              <div
+                v-for="(item, index) in mentionFilteredList"
+                :key="item.id"
+                :class="['mention-item', { active: mentionSelectedIndex === index }]"
+                @click="selectMention(item)"
+                @mouseenter="mentionSelectedIndex = index"
+              >
+                <div class="mention-avatar">
+                  <span class="avatar-text">{{ item.name[0] }}</span>
+                </div>
+                <span class="mention-name">{{ item.name }}</span>
+              </div>
+              <div v-if="mentionFilteredList.length === 0" class="mention-empty">
+                无匹配结果
+              </div>
+            </div>
+          </div>
+          <button
+            class="send-btn"
+            :class="{ loading: sending }"
+            :disabled="sending"
+            @click="handleSend"
+          >
+            发送
+          </button>
+        </div>
+      </main>
+    </div>
 
     <!-- 用户选择对话框 -->
     <el-dialog
       v-model="userSelectDialogVisible"
       :title="isCreatingGroup ? '创建群聊 - 选择成员' : '选择用户'"
       width="500px"
+      class="user-select-dialog"
     >
       <el-input
         v-model="userSearchKeyword"
         placeholder="搜索用户"
         prefix-icon="Search"
-        style="margin-bottom: 16px;"
+        class="search-input"
       />
 
       <!-- 已选择的用户（创建群聊时显示） -->
@@ -243,7 +273,7 @@
           :key="userId"
           closable
           @close="toggleUserSelection(userId)"
-          style="margin-right: 8px; margin-bottom: 8px;"
+          class="selected-tag"
         >
           {{ userList.find(u => u.id === userId)?.name }}
         </el-tag>
@@ -256,26 +286,29 @@
           :class="['user-item', { selected: selectedUserIds.includes(user.id) }]"
           @click="handleUserSelect(user)"
         >
-          <el-avatar :size="36">{{ user.name[0] }}</el-avatar>
+          <div class="user-avatar">
+            <span class="avatar-text">{{ user.name[0] }}</span>
+          </div>
           <span class="user-name">{{ user.name }}</span>
-          <el-icon v-if="isCreatingGroup && selectedUserIds.includes(user.id)" class="check-icon">
-            <el-icon-check />
-          </el-icon>
+          <span v-if="isCreatingGroup && selectedUserIds.includes(user.id)" class="check-mark"></span>
         </div>
       </div>
-      <div v-if="filteredUsers.length === 0" class="empty-text">
-        暂无用户
+      <div v-if="filteredUsers.length === 0" class="empty-state">
+        <span class="empty-icon"></span>
+        <span>暂无用户</span>
       </div>
 
       <template #footer v-if="isCreatingGroup">
-        <el-button @click="userSelectDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :disabled="selectedUserIds.length < 2"
-          @click="createGroupChat"
-        >
-          创建群聊 ({{ selectedUserIds.length }}人)
-        </el-button>
+        <div class="dialog-footer">
+          <button class="cancel-btn" @click="userSelectDialogVisible = false">取消</button>
+          <button
+            class="confirm-btn"
+            :disabled="selectedUserIds.length < 2"
+            @click="createGroupChat"
+          >
+            创建群聊 ({{ selectedUserIds.length }}人)
+          </button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -338,6 +371,7 @@ const messages = ref<Message[]>([])
 const inputMessage = ref('')
 const sending = ref(false)
 const aiLoading = ref(false)
+const messagesLoading = ref(false) // 切换会话时的加载状态
 
 // @ 提及功能相关
 const showMentionList = ref(false)
@@ -1178,6 +1212,8 @@ const switchAIConversation = async (convId: string) => {
   if (convId === currentAIConversationId.value) return
 
   currentAIConversationId.value = convId
+  messages.value = [] // 先清空消息
+  messagesLoading.value = true // 显示加载状态
 
   // 加载该会话的消息
   try {
@@ -1205,6 +1241,8 @@ const switchAIConversation = async (convId: string) => {
     }
   } catch (error) {
     console.error('[AI会话] 加载消息失败:', error)
+  } finally {
+    messagesLoading.value = false
   }
 }
 
@@ -1529,9 +1567,16 @@ const switchConversation = (conv: Conversation) => {
   activeConversation.value = conv.id
   currentChatType.value = conv.type
 
-  // 加载该会话的历史消息
-  messages.value = conversationMessages[conv.id] || []
-  scrollToBottom()
+  // 显示短暂加载状态
+  messages.value = []
+  messagesLoading.value = true
+
+  // 短暂延迟后加载消息，提供视觉反馈
+  setTimeout(() => {
+    messages.value = conversationMessages[conv.id] || []
+    messagesLoading.value = false
+    scrollToBottom()
+  }, 150)
 
   // 如果切换到群聊或私聊，确保WebSocket已连接
   if ((conv.type === 'group' || conv.type === 'private') && !wsConnected.value) {
@@ -1738,301 +1783,735 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* ========== 页面容器 ========== */
 .chat-page {
-  height: calc(100vh - 140px);
-}
-
-.chat-sidebar,
-.chat-main {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-main :deep(.el-card__body) {
-  flex: 1;
+  position: relative;
+  height: calc(100vh - 60px);
+  margin: -20px;
+  padding: 20px;
+  background: var(--bg-page);
   overflow: hidden;
-  padding: 0;
+}
+
+/* ========== 背景装饰 ========== */
+.bg-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  z-index: 0;
+  pointer-events: none;
+  animation: blobFloat 15s infinite ease-in-out;
+}
+.blob-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--color-secondary);
+  top: -150px;
+  right: -100px;
+  opacity: 0.5;
+}
+.blob-2 {
+  width: 300px;
+  height: 300px;
+  background: var(--color-info-light);
+  bottom: -100px;
+  left: -100px;
+  opacity: 0.4;
+  animation-delay: -5s;
+}
+.blob-3 {
+  width: 200px;
+  height: 200px;
+  background: var(--color-success-light);
+  top: 50%;
+  left: 50%;
+  opacity: 0.3;
+  animation-delay: -10s;
+}
+@keyframes blobFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(20px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 20px) scale(0.95); }
+}
+
+/* ========== 布局 ========== */
+.chat-layout {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 20px;
+  height: 100%;
+}
+
+/* ========== 左侧会话列表 ========== */
+.chat-sidebar {
+  width: 320px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
 }
 
 .sidebar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--border-lighter);
+  background: var(--bg-overlay);
 }
 
+.sidebar-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-icon {
+  width: 4px;
+  height: 20px;
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+
+.add-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-base);
+  background: var(--color-primary);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.add-btn:hover {
+  background: var(--color-primary-dark);
+  transform: scale(1.05);
+}
+
+.add-icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+}
+.add-icon::before,
+.add-icon::after {
+  content: '';
+  position: absolute;
+  background: white;
+  border-radius: 1px;
+}
+.add-icon::before {
+  width: 14px;
+  height: 2px;
+  top: 6px;
+  left: 0;
+}
+.add-icon::after {
+  width: 2px;
+  height: 14px;
+  top: 0;
+  left: 6px;
+}
+
+/* ========== 会话列表 ========== */
 .conversation-list {
+  flex: 1;
   overflow-y: auto;
-  height: calc(100% - 60px);
+  padding: 12px 0;
 }
 
-.section-title {
+.section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #606266;
-  background-color: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
+  padding: 8px 16px;
+  margin-bottom: 4px;
 }
 
-.user-count {
+.section-label {
   font-size: 12px;
-  color: #909399;
-  font-weight: normal;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.new-chat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px dashed var(--color-primary-light);
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.new-chat-btn:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+.new-chat-btn:hover .plus-icon::before,
+.new-chat-btn:hover .plus-icon::after {
+  background: white;
+}
+
+.plus-icon {
+  position: relative;
+  width: 12px;
+  height: 12px;
+}
+.plus-icon::before,
+.plus-icon::after {
+  content: '';
+  position: absolute;
+  background: var(--color-primary);
+  border-radius: 1px;
+  transition: all 0.2s;
+}
+.plus-icon::before {
+  width: 12px;
+  height: 2px;
+  top: 5px;
+  left: 0;
+}
+.plus-icon::after {
+  width: 2px;
+  height: 12px;
+  top: 0;
+  left: 5px;
 }
 
 .section-divider {
   height: 1px;
-  background-color: #e4e7ed;
-  margin: 8px 16px;
+  background: var(--border-lighter);
+  margin: 12px 16px;
 }
 
-.conv-action-btn {
-  padding: 4px;
-  color: #909399;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.conv-action-btn:hover {
-  background-color: #e4e7ed;
-  color: #606266;
-}
-
-.conversation-item {
+/* ========== 会话项 ========== */
+.conv-item {
   display: flex;
   align-items: center;
+  gap: 12px;
   padding: 12px 16px;
+  margin: 2px 8px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   transition: all 0.2s;
-  gap: 12px;
+}
+.conv-item:hover {
+  background: var(--bg-hover);
+}
+.conv-item.active {
+  background: var(--color-primary);
+}
+.conv-item.active .conv-name,
+.conv-item.active .conv-preview {
+  color: white;
+}
+.conv-item.active .conv-avatar {
+  box-shadow: 0 0 0 2px white;
 }
 
-.conversation-item:hover {
-  background-color: #f5f7fa;
-}
-
-.conversation-item.active {
-  background-color: #ecf5ff;
-  border-left: 3px solid #409eff;
-}
-
-
-.conversation-info {
-  flex: 1;
-  overflow: hidden;
-}
-
-.conversation-name {
+.conv-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.conv-avatar.ai {
+  background: linear-gradient(135deg, var(--color-info), var(--color-info-dark));
+}
+.conv-avatar.group {
+  background: linear-gradient(135deg, var(--color-success), var(--color-success-dark));
+}
+.conv-avatar.user {
+  background: var(--color-primary-light);
+  color: white;
+}
+
+.avatar-icon {
+  width: 20px;
+  height: 20px;
+  position: relative;
+}
+
+/* AI图标 - 机器人头像 */
+.ai-icon::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 12px;
+  background: white;
+  border-radius: 4px;
+  top: 4px;
+  left: 2px;
+}
+.ai-icon::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: var(--color-info);
+  border-radius: 50%;
+  top: 7px;
+  left: 5px;
+  box-shadow: 6px 0 0 var(--color-info);
+}
+
+/* 群组图标 */
+.group-icon::before {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 6px;
+}
+.group-icon::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 8px;
+  background: white;
+  border-radius: 4px 4px 0 0;
+  bottom: 2px;
+  left: 2px;
+}
+
+.avatar-text {
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.conv-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.conv-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.conversation-last {
+.conv-preview {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.user-info {
+.conv-more-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s;
+}
+.conv-item:hover .conv-more-btn {
+  opacity: 1;
+}
+.conv-more-btn:hover {
+  background: var(--color-secondary);
+}
+
+.more-icon {
+  display: flex;
+  gap: 2px;
+}
+.more-icon::before,
+.more-icon::after {
+  content: '';
+  width: 4px;
+  height: 4px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+}
+.more-icon::before {
+  box-shadow: 6px 0 0 var(--text-secondary);
+}
+
+/* ========== 右侧聊天区域 ========== */
+.chat-main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
   overflow: hidden;
-}
-
-.user-name {
-  font-size: 14px;
-  color: #303133;
-  margin-bottom: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-lighter);
+  background: var(--bg-overlay);
 }
 
-.chat-container {
+.chat-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-round);
+  border: 1px solid var(--border-light);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.status-dot.online {
+  background: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
+}
+.status-dot.offline {
+  background: var(--color-danger);
+}
+
+.status-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ========== 消息区域 ========== */
+.chat-body {
+  flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
 }
 
 .message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: 0;
+  padding: 24px;
+  background: linear-gradient(180deg, var(--bg-overlay) 0%, var(--bg-page) 100%);
 }
 
-.message-item {
+.msg-row {
   display: flex;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  animation: msgFadeIn 0.3s ease;
+}
+@keyframes msgFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.message-item.self {
+.msg-row.self {
   flex-direction: row-reverse;
 }
 
-.message-content {
-  max-width: 60%;
+.msg-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--color-primary-light);
+}
+.msg-avatar.ai-avatar {
+  background: linear-gradient(135deg, var(--color-info), var(--color-info-dark));
+}
+
+.msg-content {
+  max-width: 65%;
   display: flex;
   flex-direction: column;
 }
 
-.message-item.self .message-content {
+.msg-row.self .msg-content {
   align-items: flex-end;
 }
 
-.message-meta {
+.msg-meta {
   display: flex;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   font-size: 12px;
-  color: #909399;
 }
 
-.message-item.self .message-meta {
+.msg-row.self .msg-meta {
   flex-direction: row-reverse;
 }
 
-.message-bubble {
-  background-color: #ffffff;
-  padding: 10px 14px;
-  border-radius: 8px;
+.msg-sender {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.msg-time {
+  color: var(--text-placeholder);
+}
+
+.msg-bubble {
+  background: var(--bg-card);
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   word-break: break-word;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-lighter);
 }
 
-.message-item.self .message-bubble {
-  background-color: #409eff;
-  color: #ffffff;
+.msg-row.self .msg-bubble {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
 }
 
-.text-message {
-  line-height: 1.5;
+.msg-text {
+  line-height: 1.6;
   white-space: pre-wrap;
+  font-size: 14px;
 }
 
-.ai-loading {
+.msg-image {
+  max-width: 300px;
+  border-radius: var(--radius-base);
+}
+
+/* AI思考动画 */
+.ai-thinking {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #909399;
+  color: var(--text-secondary);
+  padding: 4px 0;
 }
 
-.ai-loading .is-loading {
-  animation: rotating 1.5s linear infinite;
+.thinking-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--color-info);
+  border-radius: 50%;
+  animation: thinkingPulse 1.4s infinite ease-in-out;
+}
+.thinking-dot:nth-child(1) { animation-delay: 0s; }
+.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes thinkingPulse {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
-@keyframes rotating {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.thinking-text {
+  font-size: 13px;
+  margin-left: 4px;
 }
 
-.image-message {
-  max-width: 300px;
-  border-radius: 4px;
-}
-
-.message-input-area {
-  border-top: 1px solid #dcdfe6;
-  padding: 16px;
-  background-color: #ffffff;
-}
-
-.input-toolbar {
+/* ========== 消息加载骨架屏 ========== */
+.loading-state {
   display: flex;
-  align-items: center;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.input-box {
+.loading-skeleton {
   display: flex;
   gap: 12px;
+  animation: skeletonFade 1s ease-in-out infinite;
+}
+.loading-skeleton.self {
+  flex-direction: row-reverse;
+}
+
+@keyframes skeletonFade {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--color-secondary) 25%, var(--color-secondary-light) 50%, var(--color-secondary) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+  flex-shrink: 0;
+}
+
+.skeleton-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 50%;
+}
+.loading-skeleton.self .skeleton-content {
   align-items: flex-end;
 }
 
-.input-box :deep(.el-textarea) {
-  flex: 1;
-}
-
-/* 用户选择对话框样式 */
-.selected-users {
-  margin-bottom: 16px;
-  padding: 12px;
-  background-color: #f5f7fa;
+.skeleton-meta {
+  width: 100px;
+  height: 14px;
   border-radius: 4px;
-  min-height: 40px;
+  background: linear-gradient(90deg, var(--color-secondary) 25%, var(--color-secondary-light) 50%, var(--color-secondary) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
 }
 
-.user-list {
-  max-height: 400px;
-  overflow-y: auto;
+.skeleton-bubble {
+  width: 200px;
+  height: 60px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, var(--color-secondary) 25%, var(--color-secondary-light) 50%, var(--color-secondary) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+}
+.loading-skeleton:nth-child(2) .skeleton-bubble { width: 280px; height: 80px; }
+.loading-skeleton:nth-child(3) .skeleton-bubble { width: 160px; height: 50px; }
+.loading-skeleton:nth-child(4) .skeleton-bubble { width: 240px; height: 70px; }
+
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
-.user-item {
+/* ========== 输入区域 ========== */
+.chat-input-area {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-lighter);
+  background: var(--bg-card);
   display: flex;
-  align-items: center;
   gap: 12px;
-  padding: 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s;
+  align-items: stretch;
+}
+
+.input-wrapper {
+  flex: 1;
   position: relative;
+  display: flex;
 }
 
-.user-item:hover {
-  background-color: #f5f7fa;
-}
-
-.user-item.selected {
-  background-color: #ecf5ff;
-  border-left: 3px solid #409eff;
-}
-
-.check-icon {
-  margin-left: auto;
-  color: #409eff;
-  font-size: 18px;
-}
-
-.user-name {
-  font-size: 14px;
-  color: #303133;
+.chat-textarea {
   flex: 1;
 }
-
-.empty-text {
-  text-align: center;
-  padding: 40px 0;
-  color: #909399;
+.chat-textarea :deep(.el-textarea__inner) {
+  height: 100% !important;
+  min-height: 80px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  background: var(--bg-overlay);
+  padding: 12px 16px;
   font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  transition: all 0.2s;
+}
+.chat-textarea :deep(.el-textarea__inner:hover) {
+  border-color: var(--color-primary-light);
+}
+.chat-textarea :deep(.el-textarea__inner:focus) {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(74, 101, 128, 0.1);
+  background: var(--bg-card);
 }
 
-/* @ 提及选择器样式 */
-.mention-list {
+.send-btn {
+  padding: 0 32px;
+  min-height: 80px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.send-btn:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  box-shadow: 0 4px 12px rgba(74, 101, 128, 0.3);
+}
+.send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ========== @ 提及选择器 ========== */
+.mention-popup {
   position: absolute;
   left: 0;
-  right: 50px;
-  background: white;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   max-height: 200px;
   overflow-y: auto;
   z-index: 1000;
@@ -2041,26 +2520,263 @@ onBeforeUnmount(() => {
 .mention-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 12px;
+  padding: 10px 16px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.15s;
 }
-
 .mention-item:hover,
 .mention-item.active {
-  background-color: #f5f7fa;
+  background: var(--color-secondary-light);
+}
+
+.mention-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .mention-name {
   font-size: 14px;
-  color: #303133;
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .mention-empty {
-  padding: 12px;
+  padding: 20px;
   text-align: center;
-  color: #909399;
+  color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* ========== 用户选择对话框 ========== */
+:deep(.user-select-dialog) {
+  --el-dialog-bg-color: var(--bg-card);
+  border-radius: var(--radius-xl) !important;
+}
+:deep(.user-select-dialog .el-dialog__header) {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-lighter);
+  margin: 0;
+}
+:deep(.user-select-dialog .el-dialog__title) {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+:deep(.user-select-dialog .el-dialog__body) {
+  padding: 24px;
+}
+
+.search-input {
+  margin-bottom: 16px;
+}
+.search-input :deep(.el-input__wrapper) {
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-light);
+  box-shadow: none;
+}
+
+.selected-users {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--bg-overlay);
+  border-radius: var(--radius-base);
+  min-height: 52px;
+}
+
+.selected-tag {
+  background: var(--color-primary-light);
+  color: white;
+  border: none;
+}
+
+.user-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.user-item:hover {
+  background: var(--bg-hover);
+}
+.user-item.selected {
+  background: var(--color-primary);
+}
+.user-item.selected .user-name {
+  color: white;
+}
+.user-item.selected .user-avatar {
+  box-shadow: 0 0 0 2px white;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.check-mark {
+  width: 20px;
+  height: 20px;
+  position: relative;
+}
+.check-mark::before {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 12px;
+  border: 2px solid white;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+  top: 2px;
+  left: 6px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 0;
+  color: var(--text-secondary);
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg-overlay);
+  position: relative;
+}
+.empty-icon::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--text-placeholder);
+  border-radius: 50%;
+  top: 10px;
+  left: 14px;
+}
+.empty-icon::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 3px;
+  background: var(--text-placeholder);
+  transform: rotate(45deg);
+  bottom: 12px;
+  right: 10px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-lighter);
+}
+
+.cancel-btn,
+.confirm-btn {
+  padding: 10px 24px;
+  border-radius: var(--radius-base);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.cancel-btn {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-light);
+  color: var(--text-regular);
+}
+.cancel-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-base);
+}
+
+.confirm-btn {
+  background: var(--color-primary);
+  border: none;
+  color: white;
+}
+.confirm-btn:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+.confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ========== 响应式 ========== */
+@media (max-width: 1024px) {
+  .chat-sidebar {
+    width: 280px;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-layout {
+    flex-direction: column;
+  }
+  .chat-sidebar {
+    width: 100%;
+    height: 200px;
+  }
+  .conversation-list {
+    display: flex;
+    overflow-x: auto;
+    padding: 8px;
+  }
+  .conv-item {
+    flex-shrink: 0;
+    width: 160px;
+    flex-direction: column;
+    text-align: center;
+    padding: 12px 8px;
+  }
+  .conv-info {
+    width: 100%;
+  }
+  .section-header,
+  .section-divider {
+    display: none;
+  }
+  .msg-content {
+    max-width: 80%;
+  }
 }
 </style>

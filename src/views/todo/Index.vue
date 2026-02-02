@@ -17,7 +17,7 @@
       </header>
 
       <!-- 搜索区域 -->
-      <div class="glass-panel search-panel">
+      <div class="search-card">
         <el-form :model="queryParams" inline class="search-form">
           <el-form-item label="开始时间">
             <el-date-picker
@@ -25,6 +25,7 @@
               type="datetime"
               placeholder="选择开始时间"
               value-format="X"
+              style="width: 200px"
             />
           </el-form-item>
           <el-form-item label="结束时间">
@@ -33,10 +34,15 @@
               type="datetime"
               placeholder="选择结束时间"
               value-format="X"
+              style="width: 200px"
             />
           </el-form-item>
           <el-form-item class="search-btns">
-            <AppButton type="primary" :icon="Search" @click="loadData"
+            <AppButton
+              :style="{ marginRight: '20px' }"
+              type="primary"
+              :icon="Search"
+              @click="loadData"
               >查询</AppButton
             >
             <AppButton :icon="Refresh" @click="handleReset">重置</AppButton>
@@ -45,72 +51,122 @@
       </div>
 
       <!-- 表格区域 -->
-      <div class="glass-panel table-panel">
+      <div class="table-card">
         <!-- Loading骨架屏 -->
         <div v-if="loading" class="skeleton-table">
-          <div v-for="i in 5" :key="i" class="skeleton-row">
-            <div class="skeleton-cell" style="width: 25%"></div>
-            <div class="skeleton-cell" style="width: 20%"></div>
-            <div class="skeleton-cell" style="width: 15%"></div>
-            <div class="skeleton-cell" style="width: 15%"></div>
-            <div class="skeleton-cell" style="width: 10%"></div>
-            <div class="skeleton-cell" style="width: 15%"></div>
+          <div class="skeleton-header">
+            <div class="skeleton-cell" style="flex: 2"></div>
+            <div class="skeleton-cell" style="flex: 3"></div>
+            <div class="skeleton-cell" style="flex: 1"></div>
+            <div class="skeleton-cell" style="flex: 1"></div>
+            <div class="skeleton-cell" style="flex: 1.5"></div>
+            <div class="skeleton-cell" style="flex: 1"></div>
+            <div class="skeleton-cell" style="flex: 1.5"></div>
+          </div>
+          <div v-for="i in 6" :key="i" class="skeleton-row">
+            <div class="skeleton-cell" style="flex: 2"></div>
+            <div class="skeleton-cell" style="flex: 3"></div>
+            <div class="skeleton-cell" style="flex: 1"></div>
+            <div class="skeleton-cell" style="flex: 1"></div>
+            <div class="skeleton-cell" style="flex: 1.5"></div>
+            <div class="skeleton-cell" style="flex: 1"></div>
+            <div class="skeleton-cell" style="flex: 1.5"></div>
           </div>
         </div>
 
-        <el-table
-          v-else
-          :data="tableData"
-          class="custom-table"
-          :header-cell-style="{
-            background: 'var(--bg-overlay)',
-            color: 'var(--text-primary)',
-            fontWeight: 600,
-          }"
-        >
-          <el-table-column prop="title" label="标题" width="140" show-overflow-tooltip>
+        <el-table v-else :data="tableData" class="data-table" stripe>
+          <el-table-column prop="title" label="标题" min-width="150">
             <template #default="{ row }">
-              <span class="title-text">{{ row.title }}</span>
+              <span class="cell-title">{{ row.title }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="desc" label="描述" min-width="120" show-overflow-tooltip />
-          <el-table-column prop="creatorName" label="创建人" width="80" />
-          <el-table-column label="执行人" width="100" show-overflow-tooltip>
+          <el-table-column
+            prop="desc"
+            label="描述"
+            min-width="200"
+            show-overflow-tooltip
+          >
             <template #default="{ row }">
-              <span v-if="row.executeIds?.length">{{ row.executeIds.join(", ") }}</span>
-              <span v-else class="text-muted">-</span>
+              <span class="cell-desc">{{ row.desc || "-" }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="截止时间" width="140">
+          <el-table-column
+            prop="creatorName"
+            label="创建人"
+            width="90"
+            align="center"
+          >
             <template #default="{ row }">
-              <span class="time-text">{{ formatDate(row.deadlineAt) }}</span>
+              <span class="cell-user">{{ row.creatorName || "-" }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="80">
+          <el-table-column
+            label="执行人"
+            width="100"
+            align="center"
+            show-overflow-tooltip
+          >
             <template #default="{ row }">
-              <span class="status-tag" :class="getStatusClass(row.status)">
+              <span v-if="row.executeIds?.length" class="cell-user">
+                {{
+                  row.executeIds.length > 1
+                    ? `${row.executeIds.length}人`
+                    : getExecutorNames(row.executeIds)
+                }}
+              </span>
+              <span v-else class="cell-empty">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="截止时间" width="160" align="center">
+            <template #default="{ row }">
+              <span class="cell-time">{{ formatDate(row.deadlineAt) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="130" align="center">
+            <template #default="{ row }">
+              <span class="status-badge" :class="getStatusClass(row.status)">
                 {{ getStatusText(row.status) }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right">
+          <el-table-column
+            label="操作"
+            width="240"
+            align="center"
+            fixed="right"
+          >
             <template #default="{ row }">
-              <TableActions
-                :actions="getRowActions(row)"
-                @action="(key) => handleAction(key, row)"
-              />
+              <div class="action-btns">
+                <button class="action-btn" @click="handleView(row)">
+                  查看
+                </button>
+                <button class="action-btn" @click="handleEdit(row)">
+                  编辑
+                </button>
+                <button
+                  v-if="row.status !== 3"
+                  class="action-btn success"
+                  @click="handleFinish(row)"
+                >
+                  完成
+                </button>
+                <button class="action-btn danger" @click="handleDelete(row)">
+                  删除
+                </button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
 
         <!-- 分页 -->
-        <div class="pagination-wrapper">
+        <div class="table-footer">
+          <div class="table-info">共 {{ total }} 条记录</div>
           <el-pagination
             v-model:current-page="queryParams.page"
             v-model:page-size="queryParams.count"
             :total="total"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next, jumper"
+            :page-sizes="[10, 20, 50]"
+            layout="sizes, prev, pager, next"
             @size-change="loadData"
             @current-change="loadData"
           />
@@ -122,8 +178,9 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="560px"
-      class="custom-dialog"
+      width="520px"
+      class="todo-dialog"
+      destroy-on-close
       @close="handleDialogClose"
     >
       <el-form
@@ -131,17 +188,24 @@
         :model="form"
         :rules="rules"
         label-width="80px"
-        class="custom-form"
+        class="todo-form"
       >
         <el-form-item label="标题" prop="title">
-          <el-input v-model="form.title" placeholder="请输入待办标题" />
+          <el-input
+            v-model="form.title"
+            placeholder="请输入待办标题"
+            maxlength="50"
+            show-word-limit
+          />
         </el-form-item>
         <el-form-item label="描述" prop="desc">
           <el-input
             v-model="form.desc"
             type="textarea"
-            :rows="4"
+            :rows="3"
             placeholder="请输入待办描述"
+            maxlength="200"
+            show-word-limit
           />
         </el-form-item>
         <el-form-item label="截止时间" prop="deadlineAt">
@@ -178,9 +242,8 @@
           </el-radio-group>
         </el-form-item>
       </el-form>
-
       <template #footer>
-        <div class="dialog-footer">
+        <div class="dialog-actions">
           <AppButton @click="dialogVisible = false">取消</AppButton>
           <AppButton type="primary" @click="handleSubmit">确定</AppButton>
         </div>
@@ -191,67 +254,60 @@
     <el-dialog
       v-model="viewDialogVisible"
       title="待办详情"
-      width="560px"
-      class="custom-dialog"
+      width="520px"
+      class="todo-dialog"
     >
-      <div class="detail-card">
-        <div class="detail-row">
-          <span class="detail-label">标题</span>
-          <span class="detail-value">{{ viewData.title }}</span>
+      <div class="detail-panel">
+        <div class="detail-item">
+          <label>标题</label>
+          <span>{{ viewData.title }}</span>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">描述</span>
-          <span class="detail-value">{{ viewData.desc }}</span>
+        <div class="detail-item">
+          <label>描述</label>
+          <span>{{ viewData.desc || "暂无描述" }}</span>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">创建人</span>
-          <span class="detail-value">{{ viewData.creatorName }}</span>
+        <div class="detail-item">
+          <label>创建人</label>
+          <span>{{ viewData.creatorName }}</span>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">执行人</span>
-          <span class="detail-value">
-            <template v-if="viewData.executeIds?.length">{{
-              getExecutorNames(viewData.executeIds)
-            }}</template>
-            <span v-else class="text-muted">暂无执行人</span>
-          </span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">截止时间</span>
-          <span class="detail-value">{{
-            formatDate(viewData.deadlineAt)
+        <div class="detail-item">
+          <label>执行人</label>
+          <span>{{
+            viewData.executeIds?.length
+              ? getExecutorNames(viewData.executeIds)
+              : "暂无执行人"
           }}</span>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">状态</span>
-          <span class="status-tag" :class="getStatusClass(viewData.status)">
-            {{ getStatusText(viewData.status) }}
-          </span>
+        <div class="detail-item">
+          <label>截止时间</label>
+          <span>{{ formatDate(viewData.deadlineAt) }}</span>
+        </div>
+        <div class="detail-item">
+          <label>状态</label>
+          <span class="status-badge" :class="getStatusClass(viewData.status)">{{
+            getStatusText(viewData.status)
+          }}</span>
         </div>
       </div>
 
-      <div v-if="viewData.records?.length" class="records-section">
-        <h4 class="section-title">操作记录</h4>
-        <div class="timeline-list">
+      <div v-if="viewData.records?.length" class="records-panel">
+        <h4>操作记录</h4>
+        <div class="records-list">
           <div
             v-for="record in viewData.records"
             :key="record.createAt"
-            class="timeline-item"
+            class="record-item"
           >
-            <div class="timeline-dot"></div>
-            <div class="timeline-content">
-              <div class="record-header">
+            <div class="record-dot"></div>
+            <div class="record-body">
+              <div class="record-meta">
                 <span class="record-user">{{ record.userName }}</span>
                 <span class="record-time">{{
                   formatDate(record.createAt)
                 }}</span>
               </div>
-              <p class="record-text">{{ record.content }}</p>
-              <img
-                v-if="record.image"
-                :src="record.image"
-                class="record-image"
-              />
+              <p class="record-content">{{ record.content }}</p>
+              <img v-if="record.image" :src="record.image" class="record-img" />
             </div>
           </div>
         </div>
@@ -318,26 +374,24 @@ const rules: FormRules = {
 const viewDialogVisible = ref(false);
 const viewData = ref<Partial<Todo>>({});
 
-const formatDate = (timestamp: number) =>
-  dayjs.unix(timestamp).format("YYYY-MM-DD HH:mm");
+const formatDate = (timestamp?: number) =>
+  timestamp ? dayjs.unix(timestamp).format("YYYY-MM-DD HH:mm") : "-";
 
-// 禁用今天之前的日期
-const disabledDate = (time: Date) => {
-  return time.getTime() < Date.now() - 24 * 60 * 60 * 1000;
-};
+const disabledDate = (time: Date) =>
+  time.getTime() < Date.now() - 24 * 60 * 60 * 1000;
 
-const getStatusClass = (status: number) => {
+const getStatusClass = (status?: number) => {
   const classes: Record<number, string> = {
-    1: "status-pending",
-    2: "status-progress",
-    3: "status-done",
-    4: "status-cancel",
-    5: "status-timeout",
+    1: "pending",
+    2: "progress",
+    3: "done",
+    4: "cancel",
+    5: "timeout",
   };
-  return classes[status] || "status-pending";
+  return classes[status || 0] || "pending";
 };
 
-const getStatusText = (status: number) => {
+const getStatusText = (status?: number) => {
   const texts: Record<number, string> = {
     1: "待处理",
     2: "进行中",
@@ -345,7 +399,7 @@ const getStatusText = (status: number) => {
     4: "已取消",
     5: "已超时",
   };
-  return texts[status] || "未知";
+  return texts[status || 0] || "未知";
 };
 
 const getExecutorNames = (executeIds: string[]) => {
@@ -353,37 +407,6 @@ const getExecutorNames = (executeIds: string[]) => {
   return executeIds
     .map((id) => userList.value.find((u) => u.id === id)?.name || id)
     .join("、");
-};
-
-// 获取行操作按钮配置
-const getRowActions = (row: Todo) => {
-  const actions = [
-    { label: "查看", key: "view" },
-    { label: "编辑", key: "edit" },
-  ];
-  if (row.status !== 3) {
-    actions.push({ label: "完成", key: "finish", type: "success" as const });
-  }
-  actions.push({ label: "删除", key: "delete", type: "danger" as const });
-  return actions;
-};
-
-// 处理操作按钮点击
-const handleAction = (key: string, row: Todo) => {
-  switch (key) {
-    case "view":
-      handleView(row);
-      break;
-    case "edit":
-      handleEdit(row);
-      break;
-    case "finish":
-      handleFinish(row);
-      break;
-    case "delete":
-      handleDelete(row);
-      break;
-  }
 };
 
 const loadData = async () => {
@@ -516,43 +539,58 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 页面容器 */
 .todo-page {
   position: relative;
   margin: -20px;
   padding: 24px;
   min-height: calc(100% + 40px);
   background: var(--bg-page);
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 /* 背景装饰 */
 .bg-blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
+  filter: blur(100px);
   z-index: 0;
   pointer-events: none;
+  animation: blobFloat 12s infinite ease-in-out;
 }
 .blob-1 {
-  width: 300px;
-  height: 300px;
+  width: 400px;
+  height: 400px;
   background: var(--color-secondary);
-  top: -80px;
-  right: -50px;
-  opacity: 0.6;
+  top: -150px;
+  right: -100px;
+  opacity: 0.5;
 }
 .blob-2 {
-  width: 250px;
-  height: 250px;
+  width: 300px;
+  height: 300px;
   background: var(--color-secondary-light);
-  bottom: -50px;
-  left: -50px;
-  opacity: 0.5;
+  bottom: -100px;
+  left: -100px;
+  opacity: 0.4;
+  animation-delay: -6s;
+}
+@keyframes blobFloat {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(30px, 20px) scale(1.05);
+  }
 }
 
 .page-container {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 /* 页面头部 */
@@ -560,39 +598,39 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
 }
 .header-info h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--color-primary);
 }
 .header-info p {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 14px;
   color: var(--text-secondary);
 }
 
-/* 玻璃面板 */
-.glass-panel {
+/* 卡片基础样式 */
+.search-card,
+.table-card {
   background: var(--glass-bg);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  padding: 20px;
   box-shadow: var(--shadow-soft);
 }
 
 /* 搜索区域 */
-.search-panel {
-  margin-bottom: 20px;
+.search-card {
+  padding: 20px 24px;
 }
 .search-form {
   display: flex;
+  align-items: center;
+  gap: 20px;
   flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
 }
 .search-form :deep(.el-form-item) {
   margin-bottom: 0;
@@ -601,94 +639,190 @@ onMounted(() => {
   color: var(--text-primary);
   font-weight: 500;
 }
+.search-form :deep(.el-input__wrapper) {
+  border-radius: var(--radius-base);
+  box-shadow: none;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+}
+.search-form :deep(.el-input__wrapper:hover) {
+  border-color: var(--color-primary-light);
+}
+.search-form :deep(.el-input__wrapper.is-focus) {
+  border-color: var(--color-primary);
+}
 .search-btns {
   margin-left: auto;
+  display: flex;
+  gap: 20px;
 }
 
 /* 表格区域 */
-.table-panel {
-  padding: 0;
+.table-card {
   overflow: hidden;
 }
-.custom-table {
+.data-table {
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
   --el-table-header-bg-color: var(--bg-overlay);
+  --el-table-row-hover-bg-color: var(--bg-hover);
+  --el-table-border-color: var(--border-lighter);
 }
-.custom-table :deep(.el-table__inner-wrapper::before) {
-  display: none;
-}
-.custom-table :deep(th.el-table__cell) {
+.data-table :deep(.el-table__header th) {
+  background: var(--bg-overlay) !important;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 16px 12px;
   border-bottom: 1px solid var(--border-light);
 }
-.custom-table :deep(td.el-table__cell) {
+.data-table :deep(.el-table__body td) {
+  padding: 14px 12px;
   border-bottom: 1px solid var(--border-lighter);
 }
-.custom-table :deep(.el-table__row:hover > td) {
-  background: var(--bg-hover) !important;
+.data-table :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+.data-table :deep(.el-table__row--striped .el-table__cell) {
+  background: rgba(0, 0, 0, 0.01) !important;
 }
 
-.title-text {
-  font-weight: 500;
+/* 单元格样式 */
+.cell-title {
+  font-weight: 600;
   color: var(--text-primary);
 }
-.time-text {
-  color: var(--text-secondary);
+.cell-desc {
+  color: var(--text-regular);
   font-size: 13px;
 }
-.text-muted {
+.cell-user {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.cell-time {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: "SF Mono", Monaco, monospace;
+}
+.cell-empty {
   color: var(--text-placeholder);
 }
 
 /* 状态标签 */
-.status-tag {
+.status-badge {
   display: inline-block;
-  padding: 2px 10px;
+  padding: 4px 10px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
 }
-.status-pending {
+.status-badge.pending {
   background: var(--color-secondary-light);
   color: var(--text-secondary);
 }
-.status-progress {
-  background: var(--color-warning-light);
-  color: var(--color-warning-dark);
+.status-badge.progress {
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
 }
-.status-done {
+.status-badge.done {
   background: var(--color-success-light);
   color: var(--color-success-dark);
 }
-.status-cancel {
+.status-badge.cancel {
   background: var(--color-secondary);
   color: var(--text-secondary);
 }
-.status-timeout {
+.status-badge.timeout {
   background: var(--color-danger-light);
   color: var(--color-danger-dark);
 }
 
-/* 分页 */
-.pagination-wrapper {
-  padding: 16px 20px;
+/* 操作按钮 */
+.action-btns {
   display: flex;
-  justify-content: flex-end;
+  gap: 4px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.action-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--color-primary);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.action-btn:hover {
+  background: var(--color-secondary-light);
+}
+.action-btn.success {
+  color: var(--color-success);
+}
+.action-btn.success:hover {
+  background: var(--color-success-light);
+}
+.action-btn.danger {
+  color: var(--color-danger);
+}
+.action-btn.danger:hover {
+  background: var(--color-danger-light);
+}
+
+/* 表格底部 */
+.table-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
   border-top: 1px solid var(--border-lighter);
+  background: var(--bg-overlay);
+}
+.table-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+/* 分页器 - 使用 CSS 变量统一控制 */
+.table-footer :deep(.el-pagination) {
+  --el-pagination-bg-color: var(--bg-card);
+  --el-pagination-text-color: var(--text-regular);
+  --el-pagination-button-color: var(--text-primary);
+  --el-pagination-button-bg-color: var(--bg-card);
+  --el-pagination-button-disabled-color: var(--text-placeholder);
+  --el-pagination-button-disabled-bg-color: var(--bg-card);
+  --el-pagination-hover-color: var(--color-primary);
+  --el-pagination-fill-background-color: var(--color-primary);
+  gap: 6px;
+}
+.table-footer :deep(.el-pagination .el-select) {
+  --el-select-input-focus-border-color: var(--color-primary);
+}
+.table-footer :deep(.el-pagination .el-select .el-input__wrapper) {
+  box-shadow: none !important;
 }
 
 /* 骨架屏 */
 .skeleton-table {
-  padding: 20px;
+  padding: 0;
 }
+.skeleton-header,
 .skeleton-row {
   display: flex;
-  gap: 16px;
-  padding: 16px 0;
+  gap: 12px;
+  padding: 16px 24px;
+}
+.skeleton-header {
+  background: var(--bg-overlay);
+  border-bottom: 1px solid var(--border-light);
+}
+.skeleton-row {
   border-bottom: 1px solid var(--border-lighter);
 }
 .skeleton-cell {
-  height: 16px;
+  height: 18px;
   background: linear-gradient(
     90deg,
     var(--color-secondary) 25%,
@@ -701,97 +835,154 @@ onMounted(() => {
 }
 @keyframes shimmer {
   0% {
-    background-position: -200% 0;
+    background-position: 200% 0;
   }
   100% {
-    background-position: 200% 0;
+    background-position: -200% 0;
   }
 }
 
-/* 对话框样式 */
-.dialog-footer {
+/* 对话框 */
+:deep(.todo-dialog) {
+  --el-dialog-bg-color: var(--bg-card);
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg);
+}
+:deep(.todo-dialog .el-dialog__header) {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-lighter);
+  margin: 0;
+}
+:deep(.todo-dialog .el-dialog__title) {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+:deep(.todo-dialog .el-dialog__body) {
+  padding: 24px;
+}
+:deep(.todo-dialog .el-dialog__footer) {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-lighter);
+}
+
+/* 表单 */
+.todo-form :deep(.el-form-item) {
+  margin-bottom: 20px;
+}
+.todo-form :deep(.el-form-item__label) {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.todo-form :deep(.el-input__wrapper),
+.todo-form :deep(.el-textarea__inner),
+.todo-form :deep(.el-select .el-input__wrapper) {
+  border-radius: var(--radius-base);
+  box-shadow: none;
+  border: 1px solid var(--border-light);
+}
+.todo-form :deep(.el-input__wrapper:hover),
+.todo-form :deep(.el-textarea__inner:hover) {
+  border-color: var(--color-primary-light);
+}
+.todo-form :deep(.el-input__wrapper.is-focus),
+.todo-form :deep(.el-textarea__inner:focus) {
+  border-color: var(--color-primary);
+}
+.todo-form :deep(.el-radio__input.is-checked .el-radio__inner) {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.todo-form :deep(.el-radio__input.is-checked + .el-radio__label) {
+  color: var(--color-primary);
+}
+
+.dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
 }
-.custom-form :deep(.el-form-item__label) {
-  color: var(--text-primary);
-  font-weight: 500;
-}
 
-/* 详情卡片 */
-.detail-card {
+/* 详情面板 */
+.detail-panel {
   background: var(--bg-overlay);
   border-radius: var(--radius-base);
-  padding: 16px;
+  padding: 20px;
 }
-.detail-row {
+.detail-item {
   display: flex;
   padding: 12px 0;
   border-bottom: 1px solid var(--border-lighter);
 }
-.detail-row:last-child {
-  border-bottom: none;
+.detail-item:first-child {
+  padding-top: 0;
 }
-.detail-label {
+.detail-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.detail-item label {
   width: 80px;
+  flex-shrink: 0;
   color: var(--text-secondary);
   font-size: 14px;
-  flex-shrink: 0;
 }
-.detail-value {
+.detail-item span {
   flex: 1;
   color: var(--text-primary);
   font-size: 14px;
+  line-height: 1.5;
 }
 
 /* 操作记录 */
-.records-section {
-  margin-top: 20px;
+.records-panel {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-lighter);
 }
-.section-title {
+.records-panel h4 {
   margin: 0 0 16px;
   font-size: 15px;
   font-weight: 600;
   color: var(--color-primary);
 }
-.timeline-list {
+.records-list {
   position: relative;
   padding-left: 20px;
 }
-.timeline-list::before {
+.records-list::before {
   content: "";
   position: absolute;
-  left: 5px;
+  left: 4px;
   top: 8px;
   bottom: 8px;
   width: 2px;
   background: var(--color-secondary);
   border-radius: 1px;
 }
-.timeline-item {
+.record-item {
   position: relative;
   padding-bottom: 16px;
 }
-.timeline-item:last-child {
+.record-item:last-child {
   padding-bottom: 0;
 }
-.timeline-dot {
+.record-dot {
   position: absolute;
   left: -20px;
   top: 6px;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: var(--color-primary);
   border-radius: 50%;
   border: 2px solid var(--bg-card);
 }
-.timeline-content {
+.record-body {
   background: var(--bg-overlay);
   border-radius: var(--radius-base);
   padding: 12px;
 }
-.record-header {
+.record-meta {
   display: flex;
   justify-content: space-between;
   margin-bottom: 6px;
@@ -799,20 +990,41 @@ onMounted(() => {
 .record-user {
   font-weight: 500;
   color: var(--color-primary);
-  font-size: 14px;
+  font-size: 13px;
 }
 .record-time {
   font-size: 12px;
   color: var(--text-secondary);
 }
-.record-text {
+.record-content {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-regular);
+  line-height: 1.5;
 }
-.record-image {
-  max-width: 200px;
-  margin-top: 10px;
+.record-img {
+  max-width: 180px;
+  margin-top: 8px;
   border-radius: var(--radius-sm);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .search-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search-btns {
+    margin-left: 0;
+  }
+  .table-footer {
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 </style>
