@@ -254,8 +254,9 @@ export interface KnowledgeUploadResp {
 
 /** 知识库文件列表请求参数 */
 export interface KnowledgeListParams {
-  page?: number   // 页码（从1开始）
-  count?: number  // 每页数量
+  page?: number        // 页码（从1开始）
+  count?: number       // 每页数量
+  workspaceId?: string // 工作空间 ID（可选）
 }
 
 /** 知识库索引状态 */
@@ -275,6 +276,8 @@ export interface KnowledgeFileVO {
   fileSize: number      // 文件大小
   chunkCount: number    // 分块数量
   indexStatus: KnowledgeIndexStatus  // 各索引器状态
+  workspaceId?: string      // 工作空间 ID
+  workspaceName?: string    // 工作空间名称
   createAt: number      // 创建时间
   updateAt: number      // 更新时间
 }
@@ -306,6 +309,29 @@ export interface AdapterHealthVO {
 export interface KnowledgeHealthResp {
   healthy: boolean                        // 整体是否健康
   adapters: Record<string, AdapterHealthVO>  // 各适配器状态
+}
+
+// ========== 知识库工作空间相关类型 ==========
+
+/** 知识库工作空间创建请求 */
+export interface KnowledgeWorkspaceReq {
+  name: string         // 工作空间名称（1-50字符）
+  description?: string // 描述（可选，最多200字符）
+}
+
+/** 知识库工作空间视图对象 */
+export interface KnowledgeWorkspaceVO {
+  id: string            // 工作空间 ID
+  name: string          // 名称
+  description?: string  // 描述
+  documentCount: number // 文档数量
+  createAt: number      // 创建时间戳
+  updateAt: number      // 更新时间戳
+}
+
+/** 知识库工作空间列表响应 */
+export interface KnowledgeWorkspaceListResp {
+  list: KnowledgeWorkspaceVO[]  // 工作空间列表
 }
 
 // ========== 会议相关类型 ==========

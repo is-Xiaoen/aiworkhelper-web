@@ -63,8 +63,14 @@ const routes: RouteRecordRaw[] = [
       {
         path: '/knowledge',
         name: 'Knowledge',
-        component: () => import('@/views/knowledge/Index.vue'),
+        component: () => import('@/views/knowledge/WorkspaceList.vue'),
         meta: { title: '知识库', icon: 'Reading' }
+      },
+      {
+        path: '/knowledge/:workspaceId',
+        name: 'KnowledgeDocuments',
+        component: () => import('@/views/knowledge/DocumentList.vue'),
+        meta: { title: '文档列表', hidden: true }
       },
       {
         path: '/meeting',

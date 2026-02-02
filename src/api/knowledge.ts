@@ -8,7 +8,10 @@ import type {
   KnowledgeListParams,
   KnowledgeListResp,
   KnowledgeReindexResp,
-  KnowledgeHealthResp
+  KnowledgeHealthResp,
+  KnowledgeWorkspaceReq,
+  KnowledgeWorkspaceVO,
+  KnowledgeWorkspaceListResp
 } from '@/types'
 
 // ========== 旧版 API（AI 对话模式）==========
@@ -43,10 +46,18 @@ export function knowledgeChat(data: ChatRequest): Promise<ApiResponse<ChatRespon
 /**
  * 上传知识库文件
  * 支持 .txt, .md, .pdf 格式，会自动触发索引
+ * @param file 文件对象
+ * @param workspaceId 可选的工作空间 ID
  */
-export function uploadKnowledge(file: File): Promise<ApiResponse<KnowledgeUploadResp>> {
+export function uploadKnowledge(
+  file: File,
+  workspaceId?: string
+): Promise<ApiResponse<KnowledgeUploadResp>> {
   const formData = new FormData()
   formData.append('file', file)
+  if (workspaceId) {
+    formData.append('workspaceId', workspaceId)
+  }
   return request({
     url: '/v1/knowledge/upload',
     method: 'post',
@@ -59,6 +70,7 @@ export function uploadKnowledge(file: File): Promise<ApiResponse<KnowledgeUpload
 /**
  * 获取知识库文件列表
  * 包含索引状态信息
+ * @param params 查询参数，支持 workspaceId 过滤
  */
 export function getKnowledgeList(params?: KnowledgeListParams): Promise<ApiResponse<KnowledgeListResp>> {
   return request({
@@ -66,7 +78,8 @@ export function getKnowledgeList(params?: KnowledgeListParams): Promise<ApiRespo
     method: 'get',
     params: {
       page: params?.page || 1,
-      count: params?.count || 20
+      count: params?.count || 20,
+      workspaceId: params?.workspaceId || undefined
     }
   })
 }
@@ -102,5 +115,52 @@ export function getKnowledgeHealth(): Promise<ApiResponse<KnowledgeHealthResp>> 
   return request({
     url: '/v1/knowledge/health',
     method: 'get'
+  })
+}
+
+// ========== 知识库工作空间 API ==========
+
+/**
+ * 创建知识库工作空间
+ * @param data 工作空间信息
+ */
+export function createKnowledgeWorkspace(data: KnowledgeWorkspaceReq): Promise<ApiResponse<KnowledgeWorkspaceVO>> {
+  return request({
+    url: '/v1/knowledge/workspaces',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 获取知识库工作空间列表
+ */
+export function getKnowledgeWorkspaces(): Promise<ApiResponse<KnowledgeWorkspaceListResp>> {
+  return request({
+    url: '/v1/knowledge/workspaces',
+    method: 'get'
+  })
+}
+
+/**
+ * 获取单个工作空间详情
+ * @param id 工作空间 ID
+ */
+export function getKnowledgeWorkspace(id: string): Promise<ApiResponse<KnowledgeWorkspaceVO>> {
+  return request({
+    url: `/v1/knowledge/workspaces/${id}`,
+    method: 'get'
+  })
+}
+
+/**
+ * 删除知识库工作空间
+ * 会同时删除该工作空间下的所有文档
+ * @param id 工作空间 ID
+ */
+export function deleteKnowledgeWorkspace(id: string): Promise<ApiResponse<null>> {
+  return request({
+    url: `/v1/knowledge/workspaces/${id}`,
+    method: 'delete'
   })
 }
