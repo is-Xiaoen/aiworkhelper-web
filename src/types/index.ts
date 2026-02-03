@@ -250,6 +250,7 @@ export interface KnowledgeUploadResp {
   title: string        // 文档标题
   contentType: string  // 内容类型
   fileSize: number     // 文件大小（字节）
+  parseStatus?: string // PDF 解析状态: processing/completed/failed
 }
 
 /** 知识库文件列表请求参数 */
@@ -280,6 +281,9 @@ export interface KnowledgeFileVO {
   workspaceName?: string    // 工作空间名称
   createAt: number      // 创建时间
   updateAt: number      // 更新时间
+  // PDF 解析状态字段
+  parseStatus?: string  // 解析状态: pending/processing/completed/failed
+  parseError?: string   // 解析错误信息
 }
 
 /** 知识库文件列表响应 */
