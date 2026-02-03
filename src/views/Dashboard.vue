@@ -236,23 +236,23 @@ const loadData = async () => {
       getDepSoa(),
     ]);
 
-    if (todoRes.code === 200) {
-      todoList.value = todoRes.data.data;
-      stats.value.todoCount = todoRes.data.count;
+    if (todoRes.code === 200 && todoRes.data) {
+      todoList.value = todoRes.data.data ?? [];
+      stats.value.todoCount = todoRes.data.count ?? 0;
     }
     todoLoading.value = false;
 
-    if (appRes.code === 200) {
-      approvalList.value = appRes.data.data;
-      stats.value.approvalCount = appRes.data.count;
+    if (appRes.code === 200 && appRes.data) {
+      approvalList.value = appRes.data.data ?? [];
+      stats.value.approvalCount = appRes.data.count ?? 0;
     }
     approvalLoading.value = false;
 
-    if (userRes.code === 200) {
-      stats.value.userCount = userRes.data.count;
+    if (userRes.code === 200 && userRes.data) {
+      stats.value.userCount = userRes.data.count ?? 0;
     }
-    if (depRes.code === 200) {
-      stats.value.depCount = countDepartments(depRes.data?.child || []);
+    if (depRes.code === 200 && depRes.data) {
+      stats.value.depCount = countDepartments(depRes.data?.child ?? []);
     }
   } catch (error) {
     console.error("Load data error", error);
