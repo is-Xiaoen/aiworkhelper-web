@@ -139,6 +139,14 @@
                   <div class="file-cell">
                     <span class="file-icon"></span>
                     <span class="file-name">{{ row.title || row.filename }}</span>
+                    <!-- PDF 解析状态指示器 -->
+                    <span v-if="isPdfParsing(row)" class="parse-badge parsing">
+                      <span class="parse-spinner"></span>
+                      解析中
+                    </span>
+                    <span v-else-if="isPdfParseFailed(row)" class="parse-badge failed" :title="row.parseError">
+                      解析失败
+                    </span>
                   </div>
                 </td>
                 <td>
@@ -323,7 +331,10 @@ const syncedCount = computed(() =>
   fileList.value.filter(f => f.indexStatus?.meilisearch === 'synced').length
 )
 const pendingCount = computed(() =>
-  fileList.value.filter(f => f.indexStatus?.meilisearch === 'pending').length
+  fileList.value.filter(f =>
+    f.indexStatus?.meilisearch === 'pending' ||
+    (f.contentType === 'application/pdf' && f.parseStatus === 'processing')
+  ).length
 )
 
 // 加载工作空间信息
@@ -391,6 +402,8 @@ const loadHealth = async () => {
 // 上传文件
 const handleUpload = async (file: File) => {
   uploading.value = true
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+
   try {
     // 未分类文档不传 workspaceId
     const res = await uploadKnowledge(
@@ -398,28 +411,39 @@ const handleUpload = async (file: File) => {
       isUncategorized.value ? undefined : workspaceId.value
     )
     if (res.code === 200) {
-      ElMessage.success(`文档 "${res.data.filename}" 上传成功，正在索引...`)
+      // 根据文件类型和解析状态显示不同提示
+      if (isPdf && res.data.parseStatus === 'processing') {
+        ElMessage.success(`PDF "${res.data.filename}" 已上传，正在后台解析...`)
+      } else {
+        ElMessage.success(`文档 "${res.data.filename}" 上传成功，正在索引...`)
+      }
       showUploadDialog.value = false
       await loadFileList()
 
-      // 异步索引完成后自动刷新状态
+      // 异步状态轮询：同时检查解析状态和索引状态
       let retryCount = 0
-      const maxRetries = 15
-      const checkIndexStatus = setInterval(async () => {
+      const maxRetries = 60  // PDF 解析可能需要较长时间，增加重试次数
+      const checkStatus = setInterval(async () => {
         retryCount++
         await loadFileList()
 
-        const allSynced = fileList.value.every(f =>
-          f.indexStatus?.meilisearch === 'synced' || f.indexStatus?.meilisearch === 'failed'
-        )
+        // 检查是否所有文档都完成处理
+        const allCompleted = fileList.value.every(f => {
+          // PDF 需要先完成解析
+          if (f.contentType === 'application/pdf') {
+            if (f.parseStatus === 'processing') return false
+          }
+          // 再检查索引状态
+          return f.indexStatus?.meilisearch === 'synced' || f.indexStatus?.meilisearch === 'failed'
+        })
 
-        if (allSynced || retryCount >= maxRetries) {
-          clearInterval(checkIndexStatus)
-          if (allSynced && retryCount < maxRetries) {
-            ElMessage.success('索引完成')
+        if (allCompleted || retryCount >= maxRetries) {
+          clearInterval(checkStatus)
+          if (allCompleted && retryCount < maxRetries) {
+            ElMessage.success('处理完成')
           }
         }
-      }, 2000)
+      }, 3000)  // 每 3 秒轮询一次
     } else {
       ElMessage.error(res.msg || '上传失败')
     }
@@ -478,10 +502,12 @@ const handleReindex = async (row: KnowledgeFileVO) => {
   }
 }
 
-// 判断是否有索引错误
+// 判断是否有索引错误或解析错误
 const hasIndexError = (row: KnowledgeFileVO) => {
   const status = row.indexStatus
-  return status?.meilisearch === 'failed' || status?.graphrag === 'failed'
+  const indexFailed = status?.meilisearch === 'failed' || status?.graphrag === 'failed'
+  const parseFailed = row.contentType === 'application/pdf' && row.parseStatus === 'failed'
+  return indexFailed || parseFailed
 }
 
 // 格式化时间
@@ -527,6 +553,16 @@ const getStatusText = (status: string | undefined) => {
     case 'failed': return '失败'
     default: return '未知'
   }
+}
+
+// 判断 PDF 是否正在解析
+const isPdfParsing = (row: KnowledgeFileVO) => {
+  return row.contentType === 'application/pdf' && row.parseStatus === 'processing'
+}
+
+// 判断 PDF 解析是否失败
+const isPdfParseFailed = (row: KnowledgeFileVO) => {
+  return row.contentType === 'application/pdf' && row.parseStatus === 'failed'
 }
 
 // 初始化
@@ -982,6 +1018,39 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* PDF 解析状态徽章 */
+.parse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.parse-badge.parsing {
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+}
+
+.parse-badge.failed {
+  background: var(--color-danger-light);
+  color: var(--color-danger-dark);
+  cursor: help;
+}
+
+.parse-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* 类型标签 */
