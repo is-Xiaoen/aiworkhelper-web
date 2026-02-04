@@ -180,7 +180,8 @@
                       <span class="thinking-text">AI正在思考中...</span>
                     </div>
                     <template v-else>
-                      <div class="msg-text">{{ msg.content }}</div>
+                      <div v-if="msg.sendId === 'ai'" class="msg-text markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                      <div v-else class="msg-text">{{ msg.content }}</div>
                       <!-- RAG v9.0: 显示来源引用 -->
                       <CitationList
                         v-if="msg.citations && msg.citations.length > 0"
@@ -335,6 +336,7 @@ import dayjs from 'dayjs'
 import type { WsMessage, User, AIConversation as AIConv, AIMessage, Citation, GraphEntity, GraphRelation } from '@/types'
 import CitationList from './components/CitationList.vue'
 import GraphKnowledgePanel from './components/GraphKnowledgePanel.vue'
+import { renderMarkdown } from '@/utils/markdown'
 
 const userStore = useUserStore()
 
@@ -2329,6 +2331,107 @@ onBeforeUnmount(() => {
   line-height: 1.6;
   white-space: pre-wrap;
   font-size: 14px;
+}
+
+/* Markdown 渲染样式 */
+.markdown-body {
+  white-space: normal;
+
+  :deep(p) {
+    margin: 0 0 0.5em 0;
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
+    margin: 0.5em 0 0.3em 0;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  :deep(h1) { font-size: 1.3em; }
+  :deep(h2) { font-size: 1.2em; }
+  :deep(h3) { font-size: 1.1em; }
+
+  :deep(ul), :deep(ol) {
+    margin: 0.3em 0;
+    padding-left: 1.5em;
+  }
+
+  :deep(li) {
+    margin: 0.2em 0;
+  }
+
+  :deep(code) {
+    background: rgba(0, 0, 0, 0.06);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
+  }
+
+  :deep(pre) {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 12px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+
+    code {
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+  }
+
+  :deep(blockquote) {
+    margin: 0.5em 0;
+    padding: 0.5em 1em;
+    border-left: 4px solid var(--color-primary);
+    background: rgba(var(--color-primary-rgb), 0.05);
+    color: var(--text-secondary);
+  }
+
+  :deep(a) {
+    color: var(--color-primary);
+    text-decoration: none;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  :deep(table) {
+    border-collapse: collapse;
+    margin: 0.5em 0;
+    width: 100%;
+  }
+
+  :deep(th), :deep(td) {
+    border: 1px solid var(--border-light);
+    padding: 8px 12px;
+    text-align: left;
+  }
+
+  :deep(th) {
+    background: var(--bg-secondary);
+    font-weight: 600;
+  }
+
+  :deep(hr) {
+    border: none;
+    border-top: 1px solid var(--border-light);
+    margin: 1em 0;
+  }
+
+  :deep(strong) {
+    font-weight: 600;
+  }
+
+  :deep(em) {
+    font-style: italic;
+  }
 }
 
 .msg-image {
